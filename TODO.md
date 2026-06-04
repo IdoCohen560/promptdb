@@ -39,13 +39,15 @@ Architecture & rationale: `PLAN.md`.
 - [x] **Verify:** server runs; client lists tools, run_sql(SELECT) returns rows, run_sql(DELETE) rejected ✓
 - [ ] **Verify (manual, needs Ido):** plug `promptdb-mcp` into Claude Desktop and query live (config in README)
 
-## P3 — Eval harness
-- [ ] `evals/dataset.py` — load Spider dev subset (~100–200 Qs) + DBs
-- [ ] `evals/evaluators.py` — execution-accuracy, exact-set-match, latency, cost
-- [ ] `evals/run_evals.py` — run agent over set, write results
-- [ ] failure-mode bucketing (joins / aggregations / nested / ambiguity)
-- [ ] `.github/workflows/evals.yml` — run evals on push
-- [ ] **Verify:** real execution-accuracy % + failure-mode table
+## P3 — Eval harness ✅ HARNESS DONE 2026-06-04 (Spider = headline stretch)
+- [x] `evals/dataset.py` — Chinook gold set (12 Qs, 6 difficulty buckets); Spider plugs in behind same interface
+- [x] `evals/evaluators.py` — column-subset-tolerant execution match (handles extra/reordered cols)
+- [x] `evals/run_evals.py` — accuracy, per-difficulty breakdown, latency, token cost; writes results/latest.json
+- [x] failure-mode bucketing (simple/filter/aggregation/join/group_having/nested)
+- [x] shared prompt (`build_sql_prompt`) so evals measure the REAL agent
+- [x] CI — pytest on push (`test.yml`); paid evals on manual dispatch (`evals.yml`), not per-push
+- [x] **Verify:** harness runs, 12/12 on Chinook sanity set, $0.0054/query, 2.2s avg ✓
+- [ ] **HEADLINE (P3b stretch):** download Spider dev subset → real benchmark % for the resume bullet
 
 ## P4 — Observability + cost
 - [ ] LangSmith tracing on all nodes

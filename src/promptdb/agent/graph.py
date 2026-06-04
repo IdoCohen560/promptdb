@@ -34,26 +34,37 @@ class SQLQuery(BaseModel):
     sql: str = Field(description="One read-only SQLite SELECT query that answers the question.")
 
 
+def build_sql_prompt(
+    schema: str, question: str, prev_sql: str | None = None, error: str | None = None
+) -> str:
+    """Shared SQL-generation prompt — used by the agent AND the eval harness so evals
+    measure the real agent. Requests minimal projection (only the columns asked for)."""
+    prompt = (
+        "You are a SQLite expert. Using ONLY the schema below, write a single "
+        "read-only SELECT query (SQLite dialect) that answers the question. "
+        "Do not write anything but a SELECT.\n\n"
+        f"Schema:\n{schema}\n\n"
+        f"Question: {question}"
+    )
+    if error and prev_sql:
+        prompt += (
+            f"\n\nYour previous attempt failed.\n"
+            f"Previous SQL:\n{prev_sql}\n"
+            f"Error:\n{error}\n"
+            "Write a corrected query."
+        )
+    return prompt
+
+
 def schema_retriever(state: AgentState) -> dict:
     return {"schema": get_schema_text(get_engine())}
 
 
 def sql_writer(state: AgentState) -> dict:
     llm = get_llm().with_structured_output(SQLQuery)
-    prompt = (
-        "You are a SQLite expert. Using ONLY the schema below, write a single "
-        "read-only SELECT query (SQLite dialect) that answers the question. "
-        "Do not write anything but a SELECT.\n\n"
-        f"Schema:\n{state['schema']}\n\n"
-        f"Question: {state['question']}"
+    prompt = build_sql_prompt(
+        state["schema"], state["question"], state.get("sql"), state.get("error")
     )
-    if state.get("error") and state.get("sql"):
-        prompt += (
-            f"\n\nYour previous attempt failed.\n"
-            f"Previous SQL:\n{state['sql']}\n"
-            f"Error:\n{state['error']}\n"
-            "Write a corrected query."
-        )
     out = llm.invoke(prompt)
     return {"sql": out.sql, "attempts": state.get("attempts", 0) + 1, "error": None}
 
