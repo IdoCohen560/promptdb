@@ -24,13 +24,13 @@ Architecture & rationale: `PLAN.md`.
 - [x] `cli/main.py` — `promptdb ask "question"` → run graph → print SQL + result table + answer
 - [x] **Verify:** "which 5 artists earned the most revenue?" → Iron Maiden $138.60 (correct) ✓
 
-## P2 — Self-correction + guardrails
-- [ ] `sql_validator` node — SELECT-only allow-list, block DDL/DML, column-existence check
-- [ ] conditional edge — on execution error → back to sql_writer w/ error text; max N retries
-- [ ] graceful-failure node when retries exhausted
-- [ ] guardrails — query timeout, row-limit cap, read-only DB user
-- [ ] **Verify:** error-inducing question recovers within N retries
-- [ ] **Verify:** a DELETE/DROP attempt is blocked by the validator
+## P2 — Self-correction + guardrails ✅ DONE 2026-06-04
+- [x] `sql_validator` node — SELECT/WITH-only, single-statement, mutation-keyword block
+- [x] conditional edges — validation OR execution error → back to sql_writer w/ error text; max 3 retries
+- [x] graceful failure — exhausted retries → answer_synthesizer reports the last error
+- [x] guardrails — SQLite statement timeout (progress handler) + row-limit cap + read-only connection
+- [x] **Verify:** self-correction integration test recovers from a bad query (writer called 2×, rows returned) ✓
+- [x] **Verify:** validator blocks DELETE/DROP/UPDATE/INSERT + stacked statements (unit tests) ✓
 
 ## P2.5 — MCP layer
 - [ ] `mcp_server` — expose run_sql, get_schema, list_tables as MCP tools

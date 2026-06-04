@@ -1,6 +1,7 @@
 """Read-only DB access + schema introspection. (Full RO hardening lands in P2.)"""
 
 import os
+import time
 from functools import lru_cache
 
 from dotenv import load_dotenv
@@ -10,6 +11,7 @@ load_dotenv()
 
 DEFAULT_URL = "sqlite:///chinook.db"
 MAX_ROWS = 100
+TIMEOUT_S = 5.0
 
 
 @lru_cache(maxsize=1)
@@ -37,10 +39,23 @@ def get_schema_text(engine: Engine) -> str:
     return "\n".join(lines)
 
 
-def run_select(engine: Engine, sql: str, max_rows: int = MAX_ROWS) -> tuple[list[str], list[list]]:
-    """Execute a query read-only and return (columns, rows). Raises on SQL error."""
+def run_select(
+    engine: Engine, sql: str, max_rows: int = MAX_ROWS, timeout_s: float = TIMEOUT_S
+) -> tuple[list[str], list[list]]:
+    """Execute a query read-only, aborting after timeout_s. Returns (columns, rows); raises on error."""
     with engine.connect() as conn:
-        result = conn.execute(text(sql))
-        cols = list(result.keys())
-        rows = [list(r) for r in result.fetchmany(max_rows)]
+        raw = getattr(conn.connection, "dbapi_connection", None)
+        # SQLite statement timeout via progress handler (Postgres would use statement_timeout).
+        if raw is not None and hasattr(raw, "set_progress_handler"):
+            start = time.monotonic()
+            raw.set_progress_handler(
+                lambda: 1 if time.monotonic() - start > timeout_s else 0, 10_000
+            )
+        try:
+            result = conn.execute(text(sql))
+            cols = list(result.keys())
+            rows = [list(r) for r in result.fetchmany(max_rows)]
+        finally:
+            if raw is not None and hasattr(raw, "set_progress_handler"):
+                raw.set_progress_handler(None, 0)
     return cols, rows

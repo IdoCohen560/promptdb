@@ -1,7 +1,8 @@
-"""LangGraph state machine for the P1 happy path:
-schema_retriever -> sql_writer -> sql_executor -> answer_synthesizer.
+"""LangGraph state machine for PromptDB.
 
-Self-correction loop, validator, and critic land in P2.
+Flow: schema_retriever -> sql_writer -> sql_validator -> sql_executor -> answer_synthesizer,
+with a self-correction loop: a validation or execution error routes back to sql_writer
+(with the error in context) until it succeeds or MAX_ATTEMPTS is reached.
 """
 
 import os
@@ -12,10 +13,13 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
+from promptdb.agent.guardrails import validate_sql
 from promptdb.agent.state import AgentState
 from promptdb.db.connection import get_engine, get_schema_text, run_select
 
 load_dotenv()
+
+MAX_ATTEMPTS = 3
 
 
 @lru_cache(maxsize=1)
@@ -43,15 +47,26 @@ def sql_writer(state: AgentState) -> dict:
         f"Schema:\n{state['schema']}\n\n"
         f"Question: {state['question']}"
     )
+    if state.get("error") and state.get("sql"):
+        prompt += (
+            f"\n\nYour previous attempt failed.\n"
+            f"Previous SQL:\n{state['sql']}\n"
+            f"Error:\n{state['error']}\n"
+            "Write a corrected query."
+        )
     out = llm.invoke(prompt)
-    return {"sql": out.sql}
+    return {"sql": out.sql, "attempts": state.get("attempts", 0) + 1, "error": None}
+
+
+def sql_validator(state: AgentState) -> dict:
+    return {"error": validate_sql(state["sql"])}
 
 
 def sql_executor(state: AgentState) -> dict:
     try:
         cols, rows = run_select(get_engine(), state["sql"])
         return {"columns": cols, "rows": rows, "error": None}
-    except Exception as exc:  # noqa: BLE001 — surface any DB error to the agent
+    except Exception as exc:  # noqa: BLE001 — surface any DB error to the agent for retry
         return {"error": str(exc)}
 
 
@@ -63,7 +78,10 @@ def _render(columns: list[str], rows: list[list], limit: int = 30) -> str:
 
 def answer_synthesizer(state: AgentState) -> dict:
     if state.get("error"):
-        return {"answer": f"Could not answer — the query failed: {state['error']}"}
+        return {
+            "answer": f"Could not answer after {state.get('attempts', 0)} attempts. "
+            f"Last error: {state['error']}"
+        }
     preview = _render(state.get("columns", []), state.get("rows", []))
     prompt = (
         f"Question: {state['question']}\n"
@@ -75,16 +93,34 @@ def answer_synthesizer(state: AgentState) -> dict:
     return {"answer": resp.content if isinstance(resp.content, str) else str(resp.content)}
 
 
+def route_after_validate(state: AgentState) -> str:
+    if not state.get("error"):
+        return "sql_executor"
+    return "sql_writer" if state.get("attempts", 0) < MAX_ATTEMPTS else "answer_synthesizer"
+
+
+def route_after_execute(state: AgentState) -> str:
+    if not state.get("error"):
+        return "answer_synthesizer"
+    return "sql_writer" if state.get("attempts", 0) < MAX_ATTEMPTS else "answer_synthesizer"
+
+
 @lru_cache(maxsize=1)
 def build_graph():
     g = StateGraph(AgentState)
     g.add_node("schema_retriever", schema_retriever)
     g.add_node("sql_writer", sql_writer)
+    g.add_node("sql_validator", sql_validator)
     g.add_node("sql_executor", sql_executor)
     g.add_node("answer_synthesizer", answer_synthesizer)
     g.add_edge(START, "schema_retriever")
     g.add_edge("schema_retriever", "sql_writer")
-    g.add_edge("sql_writer", "sql_executor")
-    g.add_edge("sql_executor", "answer_synthesizer")
+    g.add_edge("sql_writer", "sql_validator")
+    g.add_conditional_edges(
+        "sql_validator", route_after_validate, ["sql_executor", "sql_writer", "answer_synthesizer"]
+    )
+    g.add_conditional_edges(
+        "sql_executor", route_after_execute, ["sql_writer", "answer_synthesizer"]
+    )
     g.add_edge("answer_synthesizer", END)
     return g.compile()

@@ -7,7 +7,8 @@ class AgentState(TypedDict, total=False):
     question: str          # user's natural-language question
     schema: str            # introspected schema text
     sql: str               # generated SQL
+    attempts: int          # number of sql_writer attempts so far
     columns: list[str]     # result column names
     rows: list[list]       # result rows
-    error: Optional[str]   # execution error, if any
+    error: Optional[str]   # validation or execution error, if any
     answer: str            # final natural-language answer
