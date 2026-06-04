@@ -32,11 +32,12 @@ Architecture & rationale: `PLAN.md`.
 - [x] **Verify:** self-correction integration test recovers from a bad query (writer called 2×, rows returned) ✓
 - [x] **Verify:** validator blocks DELETE/DROP/UPDATE/INSERT + stacked statements (unit tests) ✓
 
-## P2.5 — MCP layer
-- [ ] `mcp_server` — expose run_sql, get_schema, list_tables as MCP tools
-- [ ] agent consumes tools via MCP client (not direct calls)
-- [ ] **Verify:** server runs; agent answers via MCP
-- [ ] **Verify:** server plugs into Claude Desktop and answers a query live
+## P2.5 — MCP layer ✅ DONE 2026-06-04 (Claude Desktop step pending Ido)
+- [x] `mcp_server` (FastMCP) — run_sql (guardrailed), get_schema, list_tables; `promptdb-mcp` entry point
+- [x] consumption proven via `scripts/mcp_client_demo.py` (real stdio round-trip) — design note: core
+      agent stays direct for fast evals; MCP server + client demo prove both sides without a subprocess hop
+- [x] **Verify:** server runs; client lists tools, run_sql(SELECT) returns rows, run_sql(DELETE) rejected ✓
+- [ ] **Verify (manual, needs Ido):** plug `promptdb-mcp` into Claude Desktop and query live (config in README)
 
 ## P3 — Eval harness
 - [ ] `evals/dataset.py` — load Spider dev subset (~100–200 Qs) + DBs

@@ -27,6 +27,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
 promptdb = "promptdb.cli.main:app"
+promptdb-mcp = "promptdb.mcp_server.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/promptdb"]
