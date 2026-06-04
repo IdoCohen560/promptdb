@@ -1,5 +1,7 @@
 """PromptDB CLI — the flagship interface."""
 
+import time
+
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -17,8 +19,10 @@ def ask(question: str) -> None:
     """Ask a natural-language question about the database."""
     from promptdb.agent.graph import build_graph
 
+    t0 = time.monotonic()
     with console.status("[dim]thinking…[/]"):
         result = build_graph().invoke({"question": question})
+    elapsed = time.monotonic() - t0
 
     if result.get("error"):
         console.print(f"[dim]SQL:[/] {result.get('sql', '?')}")
@@ -38,6 +42,10 @@ def ask(question: str) -> None:
         console.print(table)
 
     console.print(f"\n[bold green]{result['answer']}[/]")
+    console.print(
+        f"[dim]· {elapsed:.2f}s · ${result.get('cost_usd', 0.0):.5f} · "
+        f"{result.get('attempts', 1)} attempt(s)[/]"
+    )
 
 
 @app.command()

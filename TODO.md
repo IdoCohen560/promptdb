@@ -49,11 +49,12 @@ Architecture & rationale: `PLAN.md`.
 - [x] **Verify:** harness runs, 12/12 on Chinook sanity set, $0.0054/query, 2.2s avg ✓
 - [ ] **HEADLINE (P3b stretch):** download Spider dev subset → real benchmark % for the resume bullet
 
-## P4 — Observability + cost
-- [ ] LangSmith tracing on all nodes
-- [ ] `observability/cost.py` — per-query token + cost tracking
-- [ ] 2-model comparison (Claude vs cheaper) accuracy + cost
-- [ ] **Verify:** traces visible in LangSmith; cost logged; comparison table
+## P4 — Observability + cost ✅ DONE 2026-06-04 (LangSmith live-view pending Ido)
+- [x] LangSmith tracing — auto via env vars; `observability/tracing.py` status helper
+- [x] `observability/cost.py` — per-query token + cost; cumulative `cost_usd` in state; CLI footer
+- [x] 2-model comparison (`evals/compare_models.py`): Sonnet 100% $0.0054/q 2.6s | Haiku 91.7% $0.0018/q 1.1s
+- [x] **Verify:** cost footer live; comparison discriminates models ✓
+- [ ] **Verify (manual, needs Ido):** LangSmith traces visible (set LANGSMITH_API_KEY + LANGSMITH_TRACING=true)
 
 ## P4.5 — Data copilot (Tier 2, read-only)
 - [ ] `data/schema_graph.py` — FK introspection → Mermaid/Graphviz ER diagram; `promptdb schema`

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from promptdb.agent.guardrails import validate_sql
 from promptdb.agent.state import AgentState
 from promptdb.db.connection import get_engine, get_schema_text, run_select
+from promptdb.observability.cost import cost_usd
 
 load_dotenv()
 
@@ -61,12 +62,18 @@ def schema_retriever(state: AgentState) -> dict:
 
 
 def sql_writer(state: AgentState) -> dict:
-    llm = get_llm().with_structured_output(SQLQuery)
+    llm = get_llm().with_structured_output(SQLQuery, include_raw=True)
     prompt = build_sql_prompt(
         state["schema"], state["question"], state.get("sql"), state.get("error")
     )
     out = llm.invoke(prompt)
-    return {"sql": out.sql, "attempts": state.get("attempts", 0) + 1, "error": None}
+    usage = getattr(out["raw"], "usage_metadata", None) or {}
+    return {
+        "sql": out["parsed"].sql,
+        "attempts": state.get("attempts", 0) + 1,
+        "error": None,
+        "cost_usd": state.get("cost_usd", 0.0) + cost_usd(usage, get_llm().model),
+    }
 
 
 def sql_validator(state: AgentState) -> dict:
@@ -101,7 +108,9 @@ def answer_synthesizer(state: AgentState) -> dict:
         "Answer the question in 1-3 sentences using ONLY the result above."
     )
     resp = get_llm().invoke(prompt)
-    return {"answer": resp.content if isinstance(resp.content, str) else str(resp.content)}
+    usage = getattr(resp, "usage_metadata", None) or {}
+    answer = resp.content if isinstance(resp.content, str) else str(resp.content)
+    return {"answer": answer, "cost_usd": state.get("cost_usd", 0.0) + cost_usd(usage, get_llm().model)}
 
 
 def route_after_validate(state: AgentState) -> str:

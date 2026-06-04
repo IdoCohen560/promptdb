@@ -40,4 +40,16 @@ Plug into Claude Desktop — add to `claude_desktop_config.json`:
 }
 ```
 
+## Observability & cost
+Every query tracks token cost; the CLI prints a `· 3.2s · $0.005 · 1 attempt(s)` footer.
+
+Model comparison on the gold set (`python -m evals.compare_models`):
+
+| Model | Accuracy | Cost/query | Latency/query |
+|---|---|---|---|
+| claude-sonnet-4-6 | 100.0% | $0.00539 | 2.6s |
+| claude-haiku-4-5 | 91.7% | $0.00177 | 1.1s |
+
+LangSmith tracing is automatic when `LANGSMITH_API_KEY` and `LANGSMITH_TRACING=true` are set.
+
 _(README expands at P6 with architecture diagram, eval results, and demo.)_
