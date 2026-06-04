@@ -146,11 +146,11 @@ promptdb/
 - **P6 README + resume** → verify: README has diagram + eval table + demo link; resume bullet drafted.
 - **P7 Computer-use (optional stretch)** → verify: agent answers a question by driving a sandboxed browser to a web SQL console (vision-action), with the tool-calling path still available for comparison.
 
-## Resume bullet (fill in X/Y after P3/P4)
-> Built **PromptDB**, a production text-to-SQL agent in LangGraph reaching **X% execution accuracy on
-> the Spider benchmark**; self-correcting query loop, read-only SQL guardrails (OWASP
-> LLM06), LangSmith observability, **$Y cost-per-query** tracking, and a CI eval
-> regression suite; deployed via FastAPI + Docker with a live streaming demo.
+## Resume bullet (real numbers)
+> Built **PromptDB**, a production text-to-SQL agent (LangGraph) reaching **69.3% execution
+> accuracy on a 150-question Spider dev sample**; self-correcting query loop, read-only SQL
+> guardrails (OWASP LLM06), an MCP server, LangSmith tracing, **~$0.005 cost-per-query**
+> tracking, and a CI eval suite; FastAPI + Docker streaming web demo.
 
 ## Open decisions (none blocking)
 - **Model:** Claude (recommended, your ecosystem, strong SQL) — but compare against a cheaper model in evals for the cost story.

@@ -63,18 +63,18 @@ Architecture & rationale: `PLAN.md`.
 - [x] `data/quality.py` — orphaned FKs, empty tables, high-null columns; `promptdb doctor`
 - [x] **Verify:** all three work on Chinook (read-only) + 3 tests ✓
 
-## P5 — Deploy + UI
-- [ ] `api/main.py` — FastAPI /query + rate limit + API-key auth + structured logging
-- [ ] `app/streamlit_app.py` — streaming steps, SQL box, result table, schema diagram, profile
-- [ ] Dockerfile + container build
-- [ ] deploy to Render/Railway/Fly → live URL
-- [ ] **Verify:** live URL works; Playwright screenshots mobile/desktop
+## P5 — Deploy + UI ✅ BUILT 2026-06-04 (deploy needs Ido's host)
+- [x] `api/main.py` — FastAPI /query + /query/stream (SSE) + /health; API-key auth, per-IP rate limit, request-id logging
+- [x] `web/index.html` — streaming steps UI, SQL box, result table, answer, cost footer (FastAPI-served, single deployable)
+- [x] `Dockerfile` — self-contained (bakes Chinook), uvicorn
+- [x] **Verify (local):** /health, POST /query, SSE live node stream, index served ✓
+- [ ] **Verify (needs host):** deploy to Render/Railway → live URL + Playwright screenshots
 
-## P6 — README + resume
-- [ ] README — architecture diagram, eval table, CLI asciinema GIF, live link, setup
-- [ ] record 60s demo video (script in PLAN.md)
-- [ ] fill resume bullet X/Y from P3/P4 numbers
-- [ ] **Verify:** README complete; bullet drafted
+## P6 — README + resume ✅ DONE 2026-06-04 (demo video pending Ido)
+- [x] README — architecture (Mermaid), results table (Spider 69.3% + model comparison), usage, setup, stack
+- [x] resume bullet filled with real numbers (PLAN.md)
+- [ ] record 60s demo video / asciinema GIF (script in PLAN.md) — pending Ido
+- [x] **Verify:** README complete; bullet drafted ✓
 
 ## P7 — Computer-use (OPTIONAL stretch)
 - [ ] `browser/computer_use.py` — Playwright in Docker drives a web SQL console
