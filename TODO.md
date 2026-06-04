@@ -3,26 +3,26 @@
 Living checklist; check off as completed. Source of truth for build progress.
 Architecture & rationale: `PLAN.md`.
 
-## P0 — Setup & scaffold
-- [ ] Read current LangGraph docs (install + StateGraph API); pin version
-- [ ] Read current MCP Python SDK docs; pin version
-- [ ] Confirm Python 3.11+; create venv
-- [ ] `pyproject.toml` — deps + `promptdb` CLI entry point
-- [ ] `src/` tree with stub modules (agent, cli, db, data, mcp_server, api, observability)
-- [ ] `.gitignore`, `.env.example`, README stub
-- [ ] Install deps into venv
-- [ ] `git init` + first commit
-- [ ] **Verify:** `promptdb --help` runs without error
+## P0 — Setup & scaffold ✅ DONE 2026-06-04
+- [x] Read current LangGraph docs (install + StateGraph API); pinned langgraph 1.2.4 / langchain 1.3.4
+- [x] Read current MCP Python SDK docs; pinned mcp 1.27.2 (FastMCP)
+- [x] Confirm Python 3.12.3; venv created
+- [x] `pyproject.toml` — deps + `promptdb` CLI entry point (hatchling, src layout)
+- [x] `src/promptdb/` tree with stub modules (agent, cli, db, data, mcp_server, api, observability)
+- [x] `.gitignore`, `.env.example`, README stub
+- [x] Install deps into venv (editable + dev extras)
+- [x] `git init` + first commit (local; no remote yet)
+- [x] **Verify:** `promptdb --help` runs; imports resolve; smoke test passes
 
-## P1 — Happy path (CLI Q&A on Chinook)
-- [ ] Load Chinook SQLite sample DB
-- [ ] `db/connection.py` — read-only connection + row cap + timeout
-- [ ] `db` — schema introspection (tables/columns/FKs)
-- [ ] `agent/state.py` — typed state
-- [ ] nodes: schema_retriever, planner, sql_writer, sql_executor, answer_synthesizer
-- [ ] `agent/graph.py` — wire linear happy-path graph
-- [ ] `cli/main.py` — `promptdb "question"` → run graph → print SQL + result + answer
-- [ ] **Verify:** "which 5 artists earned the most revenue?" correct end-to-end
+## P1 — Happy path (CLI Q&A on Chinook) ✅ DONE 2026-06-04
+- [x] Load Chinook SQLite sample DB (11 tables)
+- [x] `db/connection.py` — read-only SQLite connection + row cap (timeout in P2)
+- [x] `db` — schema introspection (tables/columns/FKs)
+- [x] `agent/state.py` — typed state
+- [x] nodes: schema_retriever, sql_writer, sql_executor, answer_synthesizer (planner deferred)
+- [x] `agent/graph.py` — wire linear happy-path graph
+- [x] `cli/main.py` — `promptdb ask "question"` → run graph → print SQL + result table + answer
+- [x] **Verify:** "which 5 artists earned the most revenue?" → Iron Maiden $138.60 (correct) ✓
 
 ## P2 — Self-correction + guardrails
 - [ ] `sql_validator` node — SELECT-only allow-list, block DDL/DML, column-existence check

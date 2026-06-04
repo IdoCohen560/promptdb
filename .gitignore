@@ -12,3 +12,4 @@ build/
 *.egg-info/
 .langgraph_api/
 evals/results/*.json
+.gitnexus

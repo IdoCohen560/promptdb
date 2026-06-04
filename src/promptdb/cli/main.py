@@ -1,7 +1,8 @@
-"""PromptDB CLI — the flagship interface. Subcommands are stubs until their phase lands."""
+"""PromptDB CLI — the flagship interface."""
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 app = typer.Typer(
     help="PromptDB — ask your database in English.",
@@ -13,8 +14,30 @@ console = Console()
 
 @app.command()
 def ask(question: str) -> None:
-    """Ask a natural-language question about the database (P1)."""
-    console.print(f"[yellow]Not implemented yet (P1).[/] You asked: {question!r}")
+    """Ask a natural-language question about the database."""
+    from promptdb.agent.graph import build_graph
+
+    with console.status("[dim]thinking…[/]"):
+        result = build_graph().invoke({"question": question})
+
+    if result.get("error"):
+        console.print(f"[dim]SQL:[/] {result.get('sql', '?')}")
+        console.print(f"[red]Query error:[/] {result['error']}")
+        raise typer.Exit(1)
+
+    console.print(f"[dim]SQL:[/] [cyan]{result['sql']}[/]")
+
+    cols = result.get("columns", [])
+    rows = result.get("rows", [])
+    if cols:
+        table = Table(show_header=True, header_style="bold")
+        for c in cols:
+            table.add_column(str(c))
+        for r in rows[:20]:
+            table.add_row(*[str(v) for v in r])
+        console.print(table)
+
+    console.print(f"\n[bold green]{result['answer']}[/]")
 
 
 @app.command()
