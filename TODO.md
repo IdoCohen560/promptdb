@@ -47,7 +47,8 @@ Architecture & rationale: `PLAN.md`.
 - [x] shared prompt (`build_sql_prompt`) so evals measure the REAL agent
 - [x] CI — pytest on push (`test.yml`); paid evals on manual dispatch (`evals.yml`), not per-push
 - [x] **Verify:** harness runs, 12/12 on Chinook sanity set, $0.0054/query, 2.2s avg ✓
-- [ ] **HEADLINE (P3b stretch):** download Spider dev subset → real benchmark % for the resume bullet
+- [x] **HEADLINE (P3b):** Spider dev sample — 104/150 = 69.3% strict execution accuracy, $0.0038/query
+      (claude-sonnet-4-6); `evals/run_spider.py` — questions: xlangai/spider, DBs: premai-io/spider
 
 ## P4 — Observability + cost ✅ DONE 2026-06-04 (LangSmith live-view pending Ido)
 - [x] LangSmith tracing — auto via env vars; `observability/tracing.py` status helper

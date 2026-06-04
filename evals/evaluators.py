@@ -14,6 +14,11 @@ def _normalize(rows: list[list]) -> list[tuple]:
     return sorted(out, key=lambda t: tuple(str(c) for c in t))
 
 
+def execution_match_strict(pred_rows: list[list], gold_rows: list[list]) -> bool:
+    """Exact result-set match (order-insensitive) — comparable to official Spider exec accuracy."""
+    return _normalize(pred_rows) == _normalize(gold_rows)
+
+
 def execution_match(
     pred_cols: list[str], pred_rows: list[list],
     gold_cols: list[str], gold_rows: list[list],

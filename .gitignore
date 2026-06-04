@@ -11,5 +11,6 @@ dist/
 build/
 *.egg-info/
 .langgraph_api/
+spider_db/
 evals/results/*.json
 .gitnexus

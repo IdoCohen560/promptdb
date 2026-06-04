@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "datasets>=2.0", "huggingface_hub>=0.20"]
 
 [project.scripts]
 promptdb = "promptdb.cli.main:app"

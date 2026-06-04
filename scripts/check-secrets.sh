@@ -12,7 +12,7 @@ if printf '%s\n' "$staged" | grep -E '(^|/)\.env($|\.)' | grep -vq '\.env\.examp
 fi
 
 # 2) Scan staged additions for known secret patterns
-patterns='sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|rnd_[A-Za-z0-9]{20,}|re_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+patterns='sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|rnd_[A-Za-z0-9]{20,}|re_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|hf_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
 if git diff --cached -U0 --diff-filter=ACM | grep -E '^\+' | grep -EIn "$patterns"; then
   echo "BLOCKED: a secret-like string is staged (shown above). Remove it before committing."
   exit 1
