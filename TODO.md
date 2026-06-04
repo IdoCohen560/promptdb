@@ -56,11 +56,11 @@ Architecture & rationale: `PLAN.md`.
 - [x] **Verify:** cost footer live; comparison discriminates models ✓
 - [ ] **Verify (manual, needs Ido):** LangSmith traces visible (set LANGSMITH_API_KEY + LANGSMITH_TRACING=true)
 
-## P4.5 — Data copilot (Tier 2, read-only)
-- [ ] `data/schema_graph.py` — FK introspection → Mermaid/Graphviz ER diagram; `promptdb schema`
-- [ ] `data/profile.py` — row counts, null rates, cardinality, distributions; `promptdb profile`
-- [ ] `data/quality.py` — orphaned FKs, dupes, unexpected nulls, type anomalies; `promptdb doctor`
-- [ ] **Verify:** all three commands work on Chinook (read-only)
+## P4.5 — Data copilot (Tier 2, read-only) ✅ DONE 2026-06-04
+- [x] `data/schema_graph.py` — FK introspection → Mermaid ER diagram; `promptdb schema [--output f]`
+- [x] `data/profile.py` — row counts, null %, distinct counts; `promptdb profile`
+- [x] `data/quality.py` — orphaned FKs, empty tables, high-null columns; `promptdb doctor`
+- [x] **Verify:** all three work on Chinook (read-only) + 3 tests ✓
 
 ## P5 — Deploy + UI
 - [ ] `api/main.py` — FastAPI /query + rate limit + API-key auth + structured logging

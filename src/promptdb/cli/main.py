@@ -1,6 +1,7 @@
 """PromptDB CLI — the flagship interface."""
 
 import time
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -49,21 +50,51 @@ def ask(question: str) -> None:
 
 
 @app.command()
-def schema() -> None:
-    """Render an ER diagram of the database schema (P4.5)."""
-    console.print("[yellow]Not implemented yet (P4.5 — schema graph).[/]")
+def schema(output: str = typer.Option("", help="Write the Mermaid diagram to a file instead of stdout")) -> None:
+    """Render an ER diagram (Mermaid) of the database schema."""
+    from promptdb.data.schema_graph import mermaid_er
+
+    diagram = mermaid_er()
+    if output:
+        Path(output).write_text(diagram)
+        console.print(f"Wrote ER diagram to {output}")
+    else:
+        console.print(diagram)
 
 
 @app.command()
 def profile() -> None:
-    """Profile the database: row counts, null rates, distributions (P4.5)."""
-    console.print("[yellow]Not implemented yet (P4.5 — profiling).[/]")
+    """Profile the database: row counts, null rates, distinct counts (read-only)."""
+    from promptdb.data.profile import profile_db
+
+    data = profile_db()
+    tbl = Table(title="Tables", show_header=True, header_style="bold")
+    tbl.add_column("Table")
+    tbl.add_column("Rows", justify="right")
+    tbl.add_column("Cols", justify="right")
+    for t in data:
+        tbl.add_row(t["table"], f"{t['rows']:,}", str(len(t["columns"])))
+    console.print(tbl)
+    for t in data:
+        nullish = [c for c in t["columns"] if c["null_pct"] > 0]
+        if nullish:
+            cols = ", ".join(f"{c['col']} {c['null_pct']:.0f}% null" for c in nullish)
+            console.print(f"[dim]{t['table']}: {cols}[/]")
 
 
 @app.command()
 def doctor() -> None:
-    """Report read-only data-quality issues (P4.5)."""
-    console.print("[yellow]Not implemented yet (P4.5 — data-quality).[/]")
+    """Report read-only data-quality issues (orphaned FKs, empty tables, high-null columns)."""
+    from promptdb.data.quality import check_quality
+
+    issues = check_quality()
+    if not issues:
+        console.print("[bold green]No data-quality issues found.[/]")
+        return
+    colors = {"high": "red", "medium": "yellow", "low": "dim"}
+    for i in issues:
+        c = colors.get(i["severity"], "white")
+        console.print(f"[{c}]{i['severity'].upper():6s}[/] [bold]{i['table']}[/] — {i['issue']}")
 
 
 if __name__ == "__main__":
