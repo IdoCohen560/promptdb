@@ -16,11 +16,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
+from urllib.parse import urlparse
+
 from promptdb.agent.graph import build_graph
-from promptdb.agent.providers import make_llm, model_for
+from promptdb.agent.providers import PRESETS, list_models, make_llm, model_for
 from promptdb.api.limits import check_demo_allowed, demo_status, record_demo_usage
-from promptdb.api.remote_db import DatabaseUnreachable, UnsafeDatabaseURL, safe_engine
+from promptdb.api.remote_db import (
+    DatabaseUnreachable,
+    UnsafeDatabaseURL,
+    _assert_public_host,
+    safe_engine,
+)
 from promptdb.data.schema_graph import schema_json
+
+
+def _guard_base_url(base_url: str) -> None:
+    """SSRF guard for a model endpoint: its host must resolve to a public address."""
+    _assert_public_host(urlparse(base_url).hostname)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("promptdb")
@@ -45,9 +57,10 @@ _hits: dict[str, deque] = defaultdict(deque)
 
 class Query(BaseModel):
     question: str
-    provider: str | None = None   # BYO: "anthropic" | "openai" | "ollama"; None = demo (server key)
+    provider: str | None = None   # "anthropic" (native) or a preset name; None = demo (server key)
     model: str | None = None
     api_key: str | None = None    # BYO key — encapsulated in the model client, never stored
+    base_url: str | None = None   # any OpenAI-compatible endpoint (OpenRouter, OpenAI, custom)
     database_url: str | None = None  # connect your own cloud DB (read-only); None = demo Chinook
 
 
@@ -55,11 +68,24 @@ class ConnectRequest(BaseModel):
     database_url: str
 
 
+class ModelsRequest(BaseModel):
+    provider: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+def _effective_base(provider: str | None, base_url: str | None) -> str | None:
+    return base_url or PRESETS.get((provider or "").lower())
+
+
 def _run_config(q: "Query") -> dict | None:
     """Build a LangGraph config: a BYO model and/or a connected database. None for the pure demo."""
     cfg: dict = {}
-    if q.provider:
-        cfg["llm"] = make_llm(q.provider, q.model, q.api_key)
+    if q.provider or q.base_url:
+        base = _effective_base(q.provider, q.base_url)
+        if base:
+            _guard_base_url(base)  # SSRF: a custom/local model host must be public
+        cfg["llm"] = make_llm(q.provider, q.model, q.api_key, q.base_url)
         cfg["model_name"] = model_for(q.provider, q.model)
     if q.database_url:
         cfg["engine"] = safe_engine(q.database_url)  # raises UnsafeDatabaseURL on a bad host
@@ -107,6 +133,22 @@ def usage(request: Request) -> dict:
 def schema() -> dict:
     """Structured schema of the active database for the UI's ER blueprint."""
     return schema_json()
+
+
+@app.post("/models")
+def models(req: ModelsRequest, request: Request) -> dict:
+    """List models from an OpenAI-compatible endpoint (OpenRouter, OpenAI, custom). SSRF-guarded."""
+    _check_rate(request.client.host)
+    base = _effective_base(req.provider, req.base_url)
+    if not base:
+        raise HTTPException(status_code=400, detail="no base_url or known provider")
+    try:
+        _guard_base_url(base)
+        return {"models": list_models(base, req.api_key)}
+    except UnsafeDatabaseURL as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface listing failures to the UI
+        raise HTTPException(status_code=502, detail=f"could not list models: {exc}")
 
 
 @app.post("/connect")
