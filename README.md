@@ -4,7 +4,7 @@
 
 **Ask your database in English.** A production text-to-SQL agent built on LangGraph — it reads your schema, writes a read-only query, self-corrects on error, runs it, and explains the answer.
 
-[**Live demo → promptdb.app**](https://promptdb.app) · [Architecture](docs/ARCHITECTURE.md) · [Use your own database](docs/CONNECTOR.md) · [Changelog](CHANGELOG.md)
+[**Live demo → promptdb-ai.vercel.app**](https://promptdb-ai.vercel.app) · [Architecture](docs/ARCHITECTURE.md) · [Use your own database](docs/CONNECTOR.md) · [Changelog](CHANGELOG.md)
 
 ![accuracy](https://img.shields.io/badge/Spider_dev-69.3%25-2d6cdf) ![read-only](https://img.shields.io/badge/queries-read--only-2e8b57) ![providers](https://img.shields.io/badge/models-Anthropic_·_OpenAI_·_Ollama-555) ![license](https://img.shields.io/badge/license-MIT-555)
 
@@ -33,7 +33,7 @@ Rock dominates with 1,297 tracks, ahead of Latin (579) and Metal (374).
 | | Hosted demo | Your own database |
 |---|---|---|
 | **What** | Query a bundled sample DB (Chinook) in the browser | The agent queries your live DB in place |
-| **Setup** | None — [open promptdb.app](https://promptdb.app) | One command — [the local connector](docs/CONNECTOR.md) |
+| **Setup** | None — [open the live demo](https://promptdb-ai.vercel.app) | One command — [the local connector](docs/CONNECTOR.md) |
 | **Your data** | n/a (sample data) | **Never leaves your machine** — only schema + your own results reach the model |
 | **Model** | Server key, 5 free queries, then bring your own | Any: Anthropic, OpenAI, or local Ollama |
 
