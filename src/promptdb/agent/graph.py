@@ -29,6 +29,28 @@ def get_llm() -> ChatAnthropic:
     return ChatAnthropic(model=model, temperature=0, max_tokens=1024)
 
 
+def _llm_for(config) -> tuple[object, str]:
+    """Resolve the model for this run: a per-request client injected via
+    `config.configurable` (BYO key/provider), else the default Anthropic client.
+    Returns (llm, model_name) — model_name drives cost lookup."""
+    cfg = (config or {}).get("configurable", {}) if config else {}
+    llm = cfg.get("llm")
+    if llm is not None:
+        return llm, cfg.get("model_name", "unknown")
+    default = get_llm()
+    return default, default.model
+
+
+def _unwrap_structured(out) -> tuple[object, dict]:
+    """Normalize `.with_structured_output(..., include_raw=True)` across providers.
+    Returns (parsed_model_or_None, usage_metadata_dict)."""
+    if isinstance(out, dict):  # include_raw=True path (Anthropic, OpenAI)
+        parsed, raw = out.get("parsed"), out.get("raw")
+        usage = getattr(raw, "usage_metadata", None) or {} if raw is not None else {}
+        return parsed, usage
+    return out, getattr(out, "usage_metadata", None) or {}  # provider returned the model directly
+
+
 class SQLQuery(BaseModel):
     """A single read-only SQLite SELECT query."""
 
@@ -61,19 +83,18 @@ def schema_retriever(state: AgentState) -> dict:
     return {"schema": get_schema_text(get_engine())}
 
 
-def sql_writer(state: AgentState) -> dict:
-    llm = get_llm().with_structured_output(SQLQuery, include_raw=True)
+def sql_writer(state: AgentState, config=None) -> dict:
+    llm, model_name = _llm_for(config)
+    structured = llm.with_structured_output(SQLQuery, include_raw=True)
     prompt = build_sql_prompt(
         state["schema"], state["question"], state.get("sql"), state.get("error")
     )
-    out = llm.invoke(prompt)
-    usage = getattr(out["raw"], "usage_metadata", None) or {}
-    return {
-        "sql": out["parsed"].sql,
-        "attempts": state.get("attempts", 0) + 1,
-        "error": None,
-        "cost_usd": state.get("cost_usd", 0.0) + cost_usd(usage, get_llm().model),
-    }
+    parsed, usage = _unwrap_structured(structured.invoke(prompt))
+    attempts = state.get("attempts", 0) + 1
+    cost = state.get("cost_usd", 0.0) + cost_usd(usage, model_name)
+    if parsed is None:  # weaker models may fail to produce valid structured output
+        return {"attempts": attempts, "error": "model returned no valid SQL", "cost_usd": cost}
+    return {"sql": parsed.sql, "attempts": attempts, "error": None, "cost_usd": cost}
 
 
 def sql_validator(state: AgentState) -> dict:
@@ -94,12 +115,13 @@ def _render(columns: list[str], rows: list[list], limit: int = 30) -> str:
     return f"{head}\n{body}"
 
 
-def answer_synthesizer(state: AgentState) -> dict:
+def answer_synthesizer(state: AgentState, config=None) -> dict:
     if state.get("error"):
         return {
             "answer": f"Could not answer after {state.get('attempts', 0)} attempts. "
             f"Last error: {state['error']}"
         }
+    llm, model_name = _llm_for(config)
     preview = _render(state.get("columns", []), state.get("rows", []))
     prompt = (
         f"Question: {state['question']}\n"
@@ -107,10 +129,10 @@ def answer_synthesizer(state: AgentState) -> dict:
         f"Query result:\n{preview}\n\n"
         "Answer the question in 1-3 sentences using ONLY the result above."
     )
-    resp = get_llm().invoke(prompt)
+    resp = llm.invoke(prompt)
     usage = getattr(resp, "usage_metadata", None) or {}
     answer = resp.content if isinstance(resp.content, str) else str(resp.content)
-    return {"answer": answer, "cost_usd": state.get("cost_usd", 0.0) + cost_usd(usage, get_llm().model)}
+    return {"answer": answer, "cost_usd": state.get("cost_usd", 0.0) + cost_usd(usage, model_name)}
 
 
 def route_after_validate(state: AgentState) -> str:

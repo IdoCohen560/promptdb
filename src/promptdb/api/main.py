@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from promptdb.agent.graph import build_graph
+from promptdb.agent.providers import DEFAULT_PROVIDER, make_llm, model_for
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("promptdb")
@@ -31,6 +32,17 @@ _hits: dict[str, deque] = defaultdict(deque)
 
 class Query(BaseModel):
     question: str
+    provider: str | None = None   # BYO: "anthropic" | "openai" | "ollama"; None = demo (server key)
+    model: str | None = None
+    api_key: str | None = None    # BYO key — encapsulated in the model client, never stored
+
+
+def _run_config(q: "Query") -> dict | None:
+    """Build a LangGraph config for a BYO-key request, or None for the demo path."""
+    if not q.provider:
+        return None
+    llm = make_llm(q.provider, q.model, q.api_key)
+    return {"configurable": {"llm": llm, "model_name": model_for(q.provider, q.model)}}
 
 
 def _check_key(key: str | None) -> None:
@@ -69,7 +81,7 @@ def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> d
     _check_key(x_api_key)
     _check_rate(request.client.host)
     t0 = time.monotonic()
-    result = build_graph().invoke({"question": q.question})
+    result = build_graph().invoke({"question": q.question}, config=_run_config(q))
     return {
         "question": q.question, "sql": result.get("sql"), "columns": result.get("columns"),
         "rows": result.get("rows"), "answer": result.get("answer"), "error": result.get("error"),

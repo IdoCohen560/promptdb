@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "datasets>=2.0", "huggingface_hub>=0.20"]
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+providers = ["langchain-openai>=0.3", "langchain-ollama>=0.2"]
 
 [project.scripts]
 promptdb = "promptdb.cli.main:app"

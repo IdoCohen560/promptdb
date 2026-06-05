@@ -8,10 +8,20 @@ PRICES = {
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-haiku-4-5": (1.0, 5.0),
     "claude-opus-4": (15.0, 75.0),
+    "gpt-4o-mini": (0.15, 0.6),
+    "gpt-4o": (2.5, 10.0),
+    "gpt-4.1-mini": (0.4, 1.6),
+    "gpt-4.1": (2.0, 8.0),
 }
+
+# Locally-served models (Ollama) cost nothing — match on common family names.
+LOCAL_PREFIXES = ("gemma", "llama", "mistral", "qwen", "phi", "deepseek", "ollama/")
 
 
 def price_for(model: str) -> tuple[float, float]:
+    m = model.lower()
+    if any(m.startswith(p) for p in LOCAL_PREFIXES):
+        return (0.0, 0.0)
     for key, p in PRICES.items():
         if model.startswith(key):
             return p
