@@ -127,6 +127,19 @@ export default function Page() {
         )}
       </section>
 
+      <section style={{ marginTop: 18, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <DataSourcePicker
+          source={source}
+          onDemo={() => {
+            setSource("demo"); setDbUrl(null); setResult(DEMO_EXAMPLE);
+            setIsExample(true); setStatus(ALL_DONE()); setSelectedTable(null); setNotice(null);
+          }}
+          onCustom={() => { setSource("custom"); setResult(null); setIsExample(false); setSelectedTable(null); }}
+          onConnected={(url) => { setSource("custom"); setDbUrl(url); setResult(null); setIsExample(false); }}
+        />
+        <ProviderPicker byo={byo} setByo={setByo} usage={usage} />
+      </section>
+
       {notice && (
         <div className="panel reveal" style={{ marginTop: 20, padding: "12px 16px", borderColor: "var(--danger)", display: "flex", gap: 10, alignItems: "baseline" }}>
           <span style={{ color: "var(--danger)", fontWeight: 600, fontSize: 12 }}>NOTICE</span>
@@ -178,19 +191,8 @@ export default function Page() {
         </section>
       )}
 
-      <section style={{ marginTop: 34, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <DataSourcePicker
-          source={source}
-          onDemo={() => {
-            setSource("demo"); setDbUrl(null); setResult(DEMO_EXAMPLE);
-            setIsExample(true); setStatus(ALL_DONE()); setSelectedTable(null); setNotice(null);
-          }}
-          onCustom={() => { setSource("custom"); setResult(null); setIsExample(false); setSelectedTable(null); }}
-          onConnected={(url) => { setSource("custom"); setDbUrl(url); setResult(null); setIsExample(false); }}
-        />
-        <ProviderPicker byo={byo} setByo={setByo} usage={usage} />
-
-        {showExample && schema && (
+      {showExample && schema && (
+        <section style={{ marginTop: 28 }}>
           <div className="framed" style={{ padding: "18px 18px 20px" }}>
             <span className="framed-tab">demo · FireScope wildfire · {schema.tables.length} tables</span>
             <p className="prose" style={{ fontSize: 12, color: "var(--ink-muted)", margin: "0 0 12px" }}>
@@ -221,8 +223,8 @@ export default function Page() {
               );
             })()}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <Footer />
     </main>

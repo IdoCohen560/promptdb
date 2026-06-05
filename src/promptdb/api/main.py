@@ -29,7 +29,13 @@ from promptdb.api.remote_db import (
     _assert_public_host,
     safe_engine,
 )
-from promptdb.api.sample_seed import denied_tables, sample_tables, sample_url
+from promptdb.api.sample_seed import (
+    denied_tables,
+    deny_columns,
+    sample_tables,
+    sample_url,
+    star_guard_tables,
+)
 from promptdb.data.schema_graph import schema_json
 
 
@@ -95,7 +101,9 @@ def _run_config(q: "Query") -> dict | None:
         cfg["engine"] = safe_engine(q.database_url)  # raises UnsafeDatabaseURL on a bad host
     elif q.sample and sample_url():
         cfg["engine"] = create_engine(sample_url(), connect_args={"connect_timeout": 10})
-        cfg["denied_tables"] = denied_tables()  # block PII tables on the sample DB
+        cfg["denied_tables"] = denied_tables()       # optional whole-table block (off → show all)
+        cfg["deny_columns"] = deny_columns()         # credential columns (e.g. password_hash)
+        cfg["star_tables"] = star_guard_tables()     # tables where SELECT * is blocked
     return {"configurable": cfg} if cfg else None
 
 

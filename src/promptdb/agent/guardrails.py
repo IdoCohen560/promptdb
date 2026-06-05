@@ -16,6 +16,9 @@ _MUTATION_RE = re.compile(
 # Table referenced after FROM or JOIN (optionally schema-qualified / quoted).
 _TABLE_RE = re.compile(r'\b(?:from|join)\s+["\']?(?:\w+\.)?(\w+)', re.IGNORECASE)
 
+# A column wildcard in the select list ("SELECT *", "SELECT t.*", ", *") — NOT count(*).
+_STAR_RE = re.compile(r"select\s+(?:distinct\s+)?\*|,\s*\*|\b\w+\.\*", re.IGNORECASE)
+
 
 def validate_sql(sql: str) -> Optional[str]:
     """Return an error string if `sql` is not a safe single read-only query, else None."""
@@ -42,4 +45,21 @@ def validate_table_access(sql: str, denied: set[str]) -> Optional[str]:
     blocked = refs & denied
     if blocked:
         return f"this sample database does not expose: {', '.join(sorted(blocked))}"
+    return None
+
+
+def validate_credentials(sql: str, deny_columns: set[str], star_tables: set[str]) -> Optional[str]:
+    """Keep credential material out of the public demo: block any reference to a denied column
+    (e.g. password_hash), and block `SELECT *` on tables that hold one (so it can't leak via a
+    wildcard). The full schema is still visible and everything else is queryable."""
+    if not deny_columns and not star_tables:
+        return None
+    low = sql.lower()
+    for c in deny_columns:
+        if re.search(rf"\b{re.escape(c.lower())}\b", low):
+            return f"the demo does not expose the '{c}' column"
+    if _STAR_RE.search(sql):
+        for t in star_tables:
+            if re.search(rf"\b{re.escape(t.lower())}\b", low):
+                return f"select explicit columns instead of * from '{t}' in the demo"
     return None

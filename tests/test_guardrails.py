@@ -3,8 +3,19 @@
 from langgraph.graph import END, START, StateGraph
 
 from promptdb.agent import graph as G
-from promptdb.agent.guardrails import validate_sql, validate_table_access
+from promptdb.agent.guardrails import validate_credentials, validate_sql, validate_table_access
 from promptdb.agent.state import AgentState
+
+
+def test_credential_guard():
+    cols, stars = {"password_hash"}, {"users"}
+    assert validate_credentials("SELECT id, email FROM users", cols, stars) is None       # non-credential cols ok
+    assert validate_credentials("SELECT password_hash FROM users", cols, stars) is not None
+    assert validate_credentials("SELECT u.password_hash FROM users u", cols, stars) is not None
+    assert validate_credentials("SELECT * FROM users", cols, stars) is not None            # star could leak it
+    assert validate_credentials("SELECT * FROM news_articles", cols, stars) is None        # star fine elsewhere
+    assert validate_credentials("SELECT COUNT(*) FROM users", cols, stars) is None          # count(*) is not a wildcard
+    assert validate_credentials("SELECT 1", set(), set()) is None
 
 
 def test_denied_table_access_blocked():

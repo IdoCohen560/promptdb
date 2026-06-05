@@ -20,6 +20,18 @@ def sample_tables() -> list[str] | None:
 
 
 def denied_tables() -> set[str]:
-    """Tables a sample query must never touch (PII), enforced by the guardrail."""
+    """Tables a sample query must never touch, enforced by the guardrail (empty = show all)."""
     raw = os.environ.get("PROMPTDB_SAMPLE_DENY", "").strip()
+    return {t.strip().lower() for t in raw.split(",") if t.strip()}
+
+
+def deny_columns() -> set[str]:
+    """Columns the demo must never return (e.g. password_hash) — credential safety floor."""
+    raw = os.environ.get("PROMPTDB_SAMPLE_DENY_COLUMNS", "").strip()
+    return {c.strip().lower() for c in raw.split(",") if c.strip()}
+
+
+def star_guard_tables() -> set[str]:
+    """Tables where `SELECT *` is blocked (so a wildcard can't leak a denied column)."""
+    raw = os.environ.get("PROMPTDB_SAMPLE_STAR_GUARD", "").strip()
     return {t.strip().lower() for t in raw.split(",") if t.strip()}

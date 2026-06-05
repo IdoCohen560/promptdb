@@ -13,7 +13,7 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from promptdb.agent.guardrails import validate_sql, validate_table_access
+from promptdb.agent.guardrails import validate_credentials, validate_sql, validate_table_access
 from promptdb.agent.state import AgentState
 from promptdb.db.connection import get_engine, get_schema_text, run_select
 from promptdb.observability.cost import cost_usd
@@ -115,10 +115,11 @@ def sql_writer(state: AgentState, config=None) -> dict:
 
 def sql_validator(state: AgentState, config=None) -> dict:
     err = validate_sql(state["sql"])
-    if not err:
-        denied = ((config or {}).get("configurable", {}) if config else {}).get("denied_tables")
-        if denied:
-            err = validate_table_access(state["sql"], denied)
+    cfg = ((config or {}).get("configurable", {}) if config else {})
+    if not err and cfg.get("denied_tables"):
+        err = validate_table_access(state["sql"], cfg["denied_tables"])
+    if not err and (cfg.get("deny_columns") or cfg.get("star_tables")):
+        err = validate_credentials(state["sql"], cfg.get("deny_columns", set()), cfg.get("star_tables", set()))
     return {"error": err}
 
 
