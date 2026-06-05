@@ -64,15 +64,23 @@ class SQLQuery(BaseModel):
     sql: str = Field(description="One read-only SQLite SELECT query that answers the question.")
 
 
+_DIALECT_NAMES = {"sqlite": "SQLite", "postgresql": "PostgreSQL", "mysql": "MySQL"}
+
+
 def build_sql_prompt(
-    schema: str, question: str, prev_sql: str | None = None, error: str | None = None
+    schema: str,
+    question: str,
+    prev_sql: str | None = None,
+    error: str | None = None,
+    dialect: str = "SQLite",
 ) -> str:
     """Shared SQL-generation prompt — used by the agent AND the eval harness so evals
-    measure the real agent. Requests minimal projection (only the columns asked for)."""
+    measure the real agent. Dialect-aware so connected Postgres/MySQL DBs get correct syntax.
+    Requests minimal projection (only the columns asked for)."""
     prompt = (
-        "You are a SQLite expert. Using ONLY the schema below, write a single "
-        "read-only SELECT query (SQLite dialect) that answers the question. "
-        "Do not write anything but a SELECT.\n\n"
+        f"You are a {dialect} expert. Using ONLY the schema below, write a single "
+        f"read-only SELECT query ({dialect} dialect) that answers the question. "
+        f"Use {dialect} syntax and functions. Do not write anything but a SELECT.\n\n"
         f"Schema:\n{schema}\n\n"
         f"Question: {question}"
     )
@@ -92,9 +100,10 @@ def schema_retriever(state: AgentState, config=None) -> dict:
 
 def sql_writer(state: AgentState, config=None) -> dict:
     llm, model_name = _llm_for(config)
+    dialect = _DIALECT_NAMES.get(_engine_for(config).dialect.name, "SQL")
     structured = llm.with_structured_output(SQLQuery, include_raw=True)
     prompt = build_sql_prompt(
-        state["schema"], state["question"], state.get("sql"), state.get("error")
+        state["schema"], state["question"], state.get("sql"), state.get("error"), dialect=dialect
     )
     parsed, usage = _unwrap_structured(structured.invoke(prompt))
     attempts = state.get("attempts", 0) + 1
