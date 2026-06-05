@@ -18,6 +18,14 @@ const EXAMPLES = [
   "what columns are in the zone risk cache?",
 ];
 
+// schema-agnostic starters for a connected user database
+const CUSTOM_EXAMPLES = [
+  "how many rows are in each table?",
+  "list the tables and their row counts",
+  "what columns does the largest table have?",
+];
+const CUSTOM_STARTER = "how many rows are in each table?";
+
 const ALL_PENDING = (): Record<StageNode, StageStatus> =>
   Object.fromEntries(STAGES.map((s) => [s.node, "pending"])) as Record<StageNode, StageStatus>;
 const ALL_DONE = (): Record<StageNode, StageStatus> =>
@@ -44,6 +52,7 @@ export default function Page() {
   const [byo, setByo] = useState<Byo>(null);
   const [source, setSource] = useState<"demo" | "custom">("demo");
   const [dbUrl, setDbUrl] = useState<string | null>(null);     // a connected user database (custom mode)
+  const [customSchema, setCustomSchema] = useState<Schema | null>(null);  // connected DB's schema
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<Record<StageNode, StageStatus>>(ALL_DONE);
   const [attempts, setAttempts] = useState(1);
@@ -58,12 +67,13 @@ export default function Page() {
   }, []);
 
   const inDemo = source === "demo";
+  const effectiveSchema = inDemo ? schema : customSchema;  // demo → FireScope; custom → connected DB
 
   const activeTables = useMemo(() => {
-    if (!schema || !result?.sql) return [];
+    if (!effectiveSchema || !result?.sql) return [];
     const s = result.sql.toLowerCase();
-    return schema.tables.filter((t) => s.includes(t.name.toLowerCase())).map((t) => t.name);
-  }, [schema, result?.sql]);
+    return effectiveSchema.tables.filter((t) => s.includes(t.name.toLowerCase())).map((t) => t.name);
+  }, [effectiveSchema, result?.sql]);
 
   const advance = useCallback((doneNode: StageNode) => {
     setStatus((prev) => {
@@ -76,9 +86,11 @@ export default function Page() {
   }, []);
 
   const run = useCallback(
-    async (q: string) => {
+    async (q: string, ctx?: { source: "demo" | "custom"; dbUrl: string | null }) => {
+      const src = ctx?.source ?? source;       // override lets onConnected run before state settles
+      const url = ctx?.dbUrl ?? dbUrl;
       if (!q.trim() || running) return;
-      if (source === "custom" && !dbUrl) {
+      if (src === "custom" && !url) {
         setNotice("Connect a database first, or switch to the FireScope demo.");
         return;
       }
@@ -89,7 +101,7 @@ export default function Page() {
       setAttempts(1);
       setStatus({ ...ALL_PENDING(), schema_retriever: "active" });
       try {
-        const res = await postQuery(q, byo, source === "custom" ? dbUrl : null, source === "demo");
+        const res = await postQuery(q, byo, src === "custom" ? url : null, src === "demo");
         for (let i = 0; i < STAGES.length; i++) {
           await new Promise((r) => setTimeout(r, 150));
           advance(STAGES[i].node);
@@ -106,7 +118,6 @@ export default function Page() {
     [byo, dbUrl, source, running, advance],
   );
 
-  const showExample = inDemo;       // schema + worked example only in demo mode
   const placeholder = inDemo ? EXAMPLES[0] : "ask your connected database…";
 
   return (
@@ -115,10 +126,10 @@ export default function Page() {
 
       <section style={{ marginTop: 40 }}>
         <QueryBar question={question} setQuestion={setQuestion} onRun={run} running={running} placeholder={placeholder} />
-        {inDemo && !running && (
+        {!running && (inDemo || dbUrl) && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, alignItems: "center" }}>
             <span className="label" style={{ marginRight: 2 }}>try live →</span>
-            {EXAMPLES.map((ex) => (
+            {(inDemo ? EXAMPLES : CUSTOM_EXAMPLES).map((ex) => (
               <button key={ex} onClick={() => { setQuestion(ex); run(ex); }} style={{ padding: "6px 11px", fontSize: 12.5, color: "var(--ink)" }}>
                 {ex}
               </button>
@@ -134,8 +145,11 @@ export default function Page() {
             setSource("demo"); setDbUrl(null); setResult(DEMO_EXAMPLE);
             setIsExample(true); setStatus(ALL_DONE()); setSelectedTable(null); setNotice(null);
           }}
-          onCustom={() => { setSource("custom"); setResult(null); setIsExample(false); setSelectedTable(null); }}
-          onConnected={(url) => { setSource("custom"); setDbUrl(url); setResult(null); setIsExample(false); }}
+          onCustom={() => { setSource("custom"); setDbUrl(null); setCustomSchema(null); setResult(null); setIsExample(false); setSelectedTable(null); }}
+          onConnected={(url, sch) => {
+            setSource("custom"); setDbUrl(url); setCustomSchema(sch); setSelectedTable(null);
+            run(CUSTOM_STARTER, { source: "custom", dbUrl: url });  // worked example on their data
+          }}
         />
         <ProviderPicker byo={byo} setByo={setByo} usage={usage} />
       </section>
@@ -191,17 +205,19 @@ export default function Page() {
         </section>
       )}
 
-      {showExample && schema && (
+      {effectiveSchema && (
         <section style={{ marginTop: 28 }}>
           <div className="framed" style={{ padding: "18px 18px 20px" }}>
-            <span className="framed-tab">demo · FireScope wildfire · {schema.tables.length} tables</span>
+            <span className="framed-tab">
+              {inDemo ? "demo · FireScope wildfire" : "your database"} · {effectiveSchema.tables.length} tables
+            </span>
             <p className="prose" style={{ fontSize: 12, color: "var(--ink-muted)", margin: "0 0 12px" }}>
-              Hover a table to trace its relationships · click to inspect every column ·{" "}
-              <a href={FIRESCOPE_SITE} target="_blank" rel="noreferrer" style={{ color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 2 }}>see the live FireScope project →</a>
+              Hover a table to trace its relationships · click to inspect every column
+              {inDemo && <>{" · "}<a href={FIRESCOPE_SITE} target="_blank" rel="noreferrer" style={{ color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 2 }}>see the live FireScope project →</a></>}
             </p>
-            <SchemaBlueprint schema={schema} dimmed={running} active={activeTables} selected={selectedTable} onSelect={(t) => setSelectedTable((s) => (s === t ? null : t))} />
+            <SchemaBlueprint schema={effectiveSchema} dimmed={running} active={activeTables} selected={selectedTable} onSelect={(t) => setSelectedTable((s) => (s === t ? null : t))} />
             {selectedTable && (() => {
-              const t = schema.tables.find((x) => x.name === selectedTable);
+              const t = effectiveSchema.tables.find((x) => x.name === selectedTable);
               if (!t) return null;
               return (
                 <div className="reveal" style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 14 }}>

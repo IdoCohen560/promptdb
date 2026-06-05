@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { connectDatabase } from "@/lib/api";
+import type { Schema } from "@/lib/types";
 
 const FIRESCOPE_SITE = "https://firescope.netlify.app";
 
@@ -15,7 +16,7 @@ export default function DataSourcePicker({
   source: "demo" | "custom";
   onDemo: () => void;
   onCustom: () => void;
-  onConnected: (url: string) => void;
+  onConnected: (url: string, schema: Schema) => void;
 }) {
   const [url, setUrl] = useState("");
   const [state, setState] = useState<"idle" | "connecting" | "error">("idle");
@@ -27,9 +28,9 @@ export default function DataSourcePicker({
     setState("connecting");
     setError("");
     try {
-      await connectDatabase(url.trim()); // validates + SSRF-checks server-side
+      const schema = await connectDatabase(url.trim()); // validates + SSRF-checks server-side
       setState("idle");
-      onConnected(url.trim());
+      onConnected(url.trim(), schema);
     } catch (e) {
       setState("error");
       setError(e instanceof Error ? e.message : "connection failed");
