@@ -14,3 +14,4 @@ build/
 spider_db/
 evals/results/*.json
 .gitnexus
+.promptdb_usage.json
