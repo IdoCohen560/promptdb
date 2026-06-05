@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from urllib.parse import urlparse
 
@@ -82,6 +82,24 @@ class ModelsRequest(BaseModel):
     provider: str | None = None
     base_url: str | None = None
     api_key: str | None = None
+
+
+class SuggestRequest(BaseModel):
+    model_config = {"populate_by_name": True}
+    db_schema: dict = Field(alias="schema")  # {tables: [{name, columns: [{name, ...}]}]}
+    provider: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+
+
+def _schema_text(schema: dict) -> str:
+    lines = []
+    for t in schema.get("tables", [])[:25]:
+        cols = ", ".join(c.get("name", "") for c in t.get("columns", [])[:12])
+        if t.get("name"):
+            lines.append(f"{t['name']}({cols})")
+    return "\n".join(lines)
 
 
 def _effective_base(provider: str | None, base_url: str | None) -> str | None:
@@ -188,6 +206,35 @@ def models(req: ModelsRequest, request: Request) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 — surface listing failures to the UI
         raise HTTPException(status_code=502, detail=f"could not list models: {exc}")
+
+
+@app.post("/suggest")
+def suggest(req: SuggestRequest, request: Request) -> dict:
+    """Generate a few good, schema-grounded starter questions for a connected database, so a
+    non-technical user's first question is answerable. Cheap helper — not metered against the demo."""
+    _check_rate(request.client.host)
+    text = _schema_text(req.db_schema)
+    if not text:
+        return {"questions": []}
+    byo = bool(req.provider or req.base_url)
+    llm = (
+        make_llm(req.provider, req.model, req.api_key, req.base_url) if byo
+        else make_llm("anthropic", os.environ.get("PROMPTDB_MODEL", "claude-haiku-4-5"))
+    )
+    prompt = (
+        "You are exploring a new database. From the schema below, write exactly 4 short, natural "
+        "questions a non-technical user could ask, each answerable by ONE read-only SELECT using "
+        "counts, groupings, top-N, or joins across these tables. Do NOT filter on specific text "
+        "values you cannot verify exist. Return ONLY the 4 questions, one per line, no numbering.\n\n"
+        f"Schema:\n{text}"
+    )
+    try:
+        resp = llm.invoke(prompt)
+        content = resp.content if isinstance(resp.content, str) else str(resp.content)
+        qs = [q.strip(" -•\t0123456789.").strip() for q in content.splitlines() if q.strip()]
+        return {"questions": [q for q in qs if len(q) > 8][:4]}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"could not generate suggestions: {exc}")
 
 
 @app.post("/connect")

@@ -6,7 +6,7 @@ import FlowRail, { type StageStatus } from "@/components/FlowRail";
 import ResultTable from "@/components/ResultTable";
 import ProviderPicker from "@/components/ProviderPicker";
 import DataSourcePicker from "@/components/DataSourcePicker";
-import { getSample, getUsage, postQuery } from "@/lib/api";
+import { getSample, getUsage, postQuery, suggestQuestions } from "@/lib/api";
 import { STAGES, type Byo, type QueryResult, type Schema, type StageNode, type Usage } from "@/lib/types";
 
 const FIRESCOPE_SITE = "https://firescope.netlify.app";
@@ -52,6 +52,7 @@ export default function Page() {
   const [source, setSource] = useState<"demo" | "custom">("demo");
   const [dbUrl, setDbUrl] = useState<string | null>(null);     // a connected user database (custom mode)
   const [customSchema, setCustomSchema] = useState<Schema | null>(null);  // connected DB's schema
+  const [customChips, setCustomChips] = useState<string[]>(CUSTOM_EXAMPLES);  // schema-grounded suggestions
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<Record<StageNode, StageStatus>>(ALL_DONE);
   const [attempts, setAttempts] = useState(1);
@@ -128,7 +129,7 @@ export default function Page() {
         {!running && (inDemo || dbUrl) && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, alignItems: "center" }}>
             <span className="label" style={{ marginRight: 2 }}>try live →</span>
-            {(inDemo ? EXAMPLES : CUSTOM_EXAMPLES).map((ex) => (
+            {(inDemo ? EXAMPLES : customChips).map((ex) => (
               <button key={ex} onClick={() => { setQuestion(ex); run(ex); }} style={{ padding: "6px 11px", fontSize: 12.5, color: "var(--ink)" }}>
                 {ex}
               </button>
@@ -145,12 +146,17 @@ export default function Page() {
             setIsExample(true); setStatus(ALL_DONE()); setSelectedTable(null); setNotice(null);
           }}
           onCustom={() => { setSource("custom"); setDbUrl(null); setCustomSchema(null); setResult(null); setIsExample(false); setSelectedTable(null); }}
-          onConnected={(url, sch) => {
+          onConnected={async (url, sch) => {
             setSource("custom"); setDbUrl(url); setCustomSchema(sch); setSelectedTable(null);
-            // fast worked example: count one real table (single query, not a 14-table union)
-            const starter = sch.tables[0]
+            setCustomChips(CUSTOM_EXAMPLES);
+            // generate questions grounded in THEIR schema, then auto-run the first as a worked example
+            let starter = sch.tables[0]
               ? `how many rows are in the ${sch.tables[0].name} table?`
               : "how many tables are in this database?";
+            try {
+              const qs = await suggestQuestions(sch, byo);
+              if (qs.length) { setCustomChips(qs); starter = qs[0]; }
+            } catch { /* fall back to generic chips + starter */ }
             run(starter, { source: "custom", dbUrl: url });
           }}
         />

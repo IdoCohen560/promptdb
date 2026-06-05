@@ -28,6 +28,19 @@ export async function getSample(): Promise<Schema> {
   return body.schema;
 }
 
+/** Generate schema-grounded starter questions for a connected database. */
+export async function suggestQuestions(schema: Schema, byo: Byo): Promise<string[]> {
+  const f = modelFields(byo);
+  const r = await fetch(`${API_BASE}/suggest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Client-Id": clientId() },
+    body: JSON.stringify({ schema, provider: f.provider, base_url: f.base_url, api_key: f.api_key }),
+  });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.detail || `suggest ${r.status}`);
+  return body.questions || [];
+}
+
 /** Validate a user connection string and load its schema (SSRF-guarded server-side). */
 export async function connectDatabase(databaseUrl: string): Promise<Schema> {
   const r = await fetch(`${API_BASE}/connect`, {
