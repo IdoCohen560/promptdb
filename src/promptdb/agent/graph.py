@@ -129,14 +129,17 @@ _FROM_RE = re.compile(r"\bfrom\s+[\"'`]?(\w+)", re.IGNORECASE)
 _EQ_RE = re.compile(r"\b(?:\w+\.)?(\w+)\s*=\s*'[^']*'", re.IGNORECASE)
 
 
-def _empty_hint(engine, sql: str) -> dict | None:
+def _empty_hint(engine, sql: str, deny_columns=frozenset()) -> dict | None:
     """When a filtered query returns nothing, surface the filtered column's real values so the
-    answer can say 'did you mean…' instead of looking broken. Best-effort; silent on failure."""
+    answer can say 'did you mean…' instead of looking broken. Best-effort; silent on failure.
+    Never surfaces a guarded column's values (defense-in-depth on top of the upstream guard)."""
     fm = _FROM_RE.search(sql)
     eq = _EQ_RE.search(sql)
     if not fm or not eq:
         return None
     table, col = fm.group(1), eq.group(1)
+    if col.lower() in deny_columns:
+        return None
     try:
         _, rows = run_select(
             engine, f"SELECT {col}, COUNT(*) AS n FROM {table} GROUP BY {col} ORDER BY n DESC LIMIT 12"
@@ -154,7 +157,8 @@ def sql_executor(state: AgentState, config=None) -> dict:
         cols, rows = run_select(engine, state["sql"])
         out: dict = {"columns": cols, "rows": rows, "error": None}
         if not rows:  # 0 rows often means a filter value that doesn't exist — gather the real values
-            hint = _empty_hint(engine, state["sql"])
+            cfg = (config or {}).get("configurable", {}) if config else {}
+            hint = _empty_hint(engine, state["sql"], cfg.get("deny_columns", frozenset()))
             if hint:
                 out["hint"] = hint
         return out
