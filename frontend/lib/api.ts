@@ -9,6 +9,14 @@ export async function getSchema(): Promise<Schema> {
   return r.json();
 }
 
+/** A ready-to-use read-only sample cloud database (so visitors can try the connect flow). */
+export async function getSample(): Promise<{ database_url: string; schema: Schema }> {
+  const r = await fetch(`${API_BASE}/sample`);
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.detail || `sample ${r.status}`);
+  return body;
+}
+
 /** Validate a user connection string and load its schema (SSRF-guarded server-side). */
 export async function connectDatabase(databaseUrl: string): Promise<Schema> {
   const r = await fetch(`${API_BASE}/connect`, {
@@ -54,6 +62,30 @@ export function streamQuery(
   return () => es.close();
 }
 
+/** Map a Byo model choice to the request's provider/base_url pair (custom → base_url). */
+function modelFields(byo: Byo) {
+  if (!byo) return { provider: null, base_url: null, model: null, api_key: null };
+  return {
+    provider: byo.preset === "custom" ? null : byo.preset,
+    base_url: byo.preset === "custom" ? byo.baseUrl : null,
+    model: byo.model || null,
+    api_key: byo.apiKey || null,
+  };
+}
+
+/** List models from a provider's OpenAI-compatible /models route. */
+export async function fetchModels(byo: Byo): Promise<string[]> {
+  const f = modelFields(byo);
+  const r = await fetch(`${API_BASE}/models`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider: f.provider, base_url: f.base_url, api_key: f.api_key }),
+  });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.detail || `models ${r.status}`);
+  return body.models;
+}
+
 /** POST path (used for BYO key and/or a connected database). Key + connection string travel in
  *  the body, never the URL. */
 export async function postQuery(
@@ -64,13 +96,7 @@ export async function postQuery(
   const r = await fetch(`${API_BASE}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      question,
-      provider: byo?.provider ?? null,
-      model: byo?.model || null,
-      api_key: byo?.apiKey || null,
-      database_url: databaseUrl,
-    }),
+    body: JSON.stringify({ question, ...modelFields(byo), database_url: databaseUrl }),
   });
   const body = await r.json();
   if (!r.ok) throw new Error(body.detail || `query ${r.status}`);

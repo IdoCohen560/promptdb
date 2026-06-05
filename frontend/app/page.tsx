@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SchemaBlueprint from "@/components/SchemaBlueprint";
 import FlowRail, { type StageStatus } from "@/components/FlowRail";
 import ResultTable from "@/components/ResultTable";
-import ModelPicker from "@/components/ModelPicker";
+import ProviderPicker from "@/components/ProviderPicker";
 import DataSourcePicker from "@/components/DataSourcePicker";
 import { getSchema, getUsage, postQuery, streamQuery } from "@/lib/api";
 import { STAGES, type Byo, type QueryResult, type Schema, type StageNode, type Usage } from "@/lib/types";
@@ -205,7 +205,7 @@ export default function Page() {
           onDemo={() => { setDbUrl(null); setCustomSchema(null); setResult(null); }}
           onConnected={(url, sch) => { setDbUrl(url); setCustomSchema(sch); setResult(null); }}
         />
-        <ModelPicker byo={byo} setByo={setByo} usage={usage} />
+        <ProviderPicker byo={byo} setByo={setByo} usage={usage} />
         {effectiveSchema && (
           <div className="framed" style={{ padding: "18px 18px 20px" }}>
             <span className="framed-tab">

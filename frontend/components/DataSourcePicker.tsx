@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { connectDatabase } from "@/lib/api";
+import { connectDatabase, getSample } from "@/lib/api";
 import type { Schema } from "@/lib/types";
 
 /** Choose what the agent queries: the bundled demo DB, or your own.
@@ -31,6 +31,20 @@ export default function DataSourcePicker({
     } catch (e) {
       setState("error");
       setError(e instanceof Error ? e.message : "connection failed");
+    }
+  }
+
+  async function trySample() {
+    setState("connecting");
+    setError("");
+    try {
+      const { database_url, schema } = await getSample();
+      setUrl(database_url);
+      setState("idle");
+      onConnected(database_url, schema);
+    } catch (e) {
+      setState("error");
+      setError(e instanceof Error ? e.message : "sample unavailable");
     }
   }
 
@@ -67,6 +81,14 @@ export default function DataSourcePicker({
             >
               {state === "connecting" ? "connecting…" : "connect"}
             </button>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+            <button onClick={trySample} disabled={state === "connecting"} style={{ padding: "6px 12px", fontSize: 12.5 }}>
+              {state === "connecting" ? "connecting…" : "Try a sample database →"}
+            </button>
+            <span className="prose" style={{ fontSize: 12, color: "var(--ink-muted)" }}>
+              no database of your own? connect a read-only sample
+            </span>
           </div>
           <p className="prose" style={{ fontSize: 12, color: "var(--ink-muted)", margin: "8px 0 0", lineHeight: 1.5 }}>
             Postgres or MySQL reachable from the internet. <strong style={{ color: "var(--ink)" }}>Use a read-only user</strong> — queries are

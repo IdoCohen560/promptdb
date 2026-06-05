@@ -24,9 +24,18 @@ export type QueryResult = {
   usage?: Usage | null;
 };
 
-export type Provider = "anthropic" | "openai" | "ollama";
+export type Preset = "openrouter" | "openai" | "anthropic" | "custom";
 
-export type Byo = { provider: Provider; model: string; apiKey: string } | null;
+// null = demo (server key). Otherwise a bring-your-own model on any OpenAI-compatible endpoint.
+export type Byo = {
+  preset: Preset;
+  baseUrl: string; // only used when preset === "custom"
+  model: string;
+  apiKey: string;
+} | null;
+
+// presets that expose an OpenAI-style /models route (so we can populate a model dropdown)
+export const LISTABLE: Preset[] = ["openrouter", "openai", "custom"];
 
 // the agent's pipeline stages, in order
 export const STAGES = [

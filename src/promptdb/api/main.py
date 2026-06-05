@@ -27,6 +27,7 @@ from promptdb.api.remote_db import (
     _assert_public_host,
     safe_engine,
 )
+from promptdb.api.sample_seed import sample_url
 from promptdb.data.schema_graph import schema_json
 
 
@@ -135,6 +136,22 @@ def schema() -> dict:
     return schema_json()
 
 
+@app.get("/sample")
+def sample() -> dict:
+    """A ready-to-use read-only sample cloud database (a synthetic bookshop), so visitors can try
+    the connect flow without their own DB. Self-seeds on first use; returns its read-only URL + schema."""
+    try:
+        url = sample_url()  # seeds on first call (server-side), returns the read-only connection string
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"sample database unavailable: {exc}")
+    if not url:
+        raise HTTPException(status_code=404, detail="no sample database configured")
+    try:
+        return {"database_url": url, "schema": schema_json(safe_engine(url))}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"sample database unavailable: {exc}")
+
+
 @app.post("/models")
 def models(req: ModelsRequest, request: Request) -> dict:
     """List models from an OpenAI-compatible endpoint (OpenRouter, OpenAI, custom). SSRF-guarded."""
@@ -170,7 +187,7 @@ def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> d
     _check_key(x_api_key)
     ip = request.client.host
     _check_rate(ip)
-    byo = bool(q.provider)
+    byo = bool(q.provider or q.base_url)  # any BYO model (preset or custom endpoint) bypasses the cap
     if not byo:  # demo path runs on the server key — enforce free-query + daily-budget caps
         ok, msg = check_demo_allowed(ip)
         if not ok:
