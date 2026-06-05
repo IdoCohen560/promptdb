@@ -18,6 +18,21 @@ const EXAMPLES = [
 
 const ALL_PENDING = (): Record<StageNode, StageStatus> =>
   Object.fromEntries(STAGES.map((s) => [s.node, "pending"])) as Record<StageNode, StageStatus>;
+const ALL_DONE = (): Record<StageNode, StageStatus> =>
+  Object.fromEntries(STAGES.map((s) => [s.node, "done"])) as Record<StageNode, StageStatus>;
+
+// A real, pre-computed run shown on first load so visitors see the agent working instantly (no cost).
+const DEMO_RESULT: QueryResult = {
+  question: "which 3 genres have the most tracks?",
+  sql: "SELECT g.Name, COUNT(t.TrackId) AS TrackCount\nFROM Genre g\nJOIN Track t ON g.GenreId = t.GenreId\nGROUP BY g.GenreId, g.Name\nORDER BY TrackCount DESC\nLIMIT 3",
+  columns: ["Name", "TrackCount"],
+  rows: [["Rock", 1297], ["Latin", 579], ["Metal", 374]],
+  answer: "Rock dominates with 1,297 tracks, ahead of Latin (579) and Metal (374). The agent read the schema, wrote this read-only SQL, ran it, and explained the result.",
+  error: null,
+  cost_usd: 0.00222,
+  latency_s: 1.98,
+  usage: null,
+};
 
 export default function Page() {
   const [schema, setSchema] = useState<Schema | null>(null);
@@ -28,9 +43,11 @@ export default function Page() {
   const [sampleMode, setSampleMode] = useState(false);
   const [customSchema, setCustomSchema] = useState<Schema | null>(null);
   const [running, setRunning] = useState(false);
-  const [status, setStatus] = useState<Record<StageNode, StageStatus>>(ALL_PENDING);
+  const [status, setStatus] = useState<Record<StageNode, StageStatus>>(ALL_DONE);
   const [attempts, setAttempts] = useState(1);
-  const [result, setResult] = useState<QueryResult | null>(null);
+  const [result, setResult] = useState<QueryResult | null>(DEMO_RESULT);
+  const [isExample, setIsExample] = useState(true);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -62,6 +79,7 @@ export default function Page() {
       if (!q.trim() || running) return;
       cancelRef.current?.();
       setRunning(true);
+      setIsExample(false);
       setNotice(null);
       setResult(null);
       setAttempts(1);
@@ -134,13 +152,14 @@ export default function Page() {
 
       <section style={{ marginTop: 40 }}>
         <QueryBar question={question} setQuestion={setQuestion} onRun={run} running={running} />
-        {!result && !running && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+        {!running && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, alignItems: "center" }}>
+            <span className="label" style={{ marginRight: 2 }}>try live →</span>
             {EXAMPLES.map((ex) => (
               <button
                 key={ex}
                 onClick={() => { setQuestion(ex); run(ex); }}
-                style={{ padding: "6px 11px", fontSize: 12.5, color: "var(--ink-muted)" }}
+                style={{ padding: "6px 11px", fontSize: 12.5, color: "var(--ink)" }}
               >
                 {ex}
               </button>
@@ -158,7 +177,13 @@ export default function Page() {
 
       {(running || result) && (
         <section className="framed reveal" style={{ marginTop: 28, padding: "20px 20px 22px" }}>
-          <span className="framed-tab">pipeline</span>
+          <span className="framed-tab">{isExample ? "example" : "pipeline"}</span>
+          {isExample && (
+            <p className="prose" style={{ margin: "0 0 14px", fontSize: 13, color: "var(--ink-muted)" }}>
+              A worked example of <span style={{ color: "var(--ink)" }}>&ldquo;{DEMO_RESULT.question}&rdquo;</span>.
+              Edit the question above (or click a chip) and hit <strong style={{ color: "var(--ink)" }}>run</strong> to query live.
+            </p>
+          )}
           <FlowRail status={status} attempts={attempts} />
 
           {result?.sql && (
@@ -214,7 +239,38 @@ export default function Page() {
             <span className="framed-tab">
               {dbUrl ? "your database" : sampleMode ? "sample · wildfire data" : "schema"} · {effectiveSchema.tables.length} tables
             </span>
-            <SchemaBlueprint schema={effectiveSchema} dimmed={running || !!result} active={activeTables} />
+            <p className="prose" style={{ fontSize: 12, color: "var(--ink-muted)", margin: "0 0 12px" }}>
+              Hover a table to trace its relationships · click to inspect every column
+            </p>
+            <SchemaBlueprint
+              schema={effectiveSchema}
+              dimmed={running}
+              active={activeTables}
+              selected={selectedTable}
+              onSelect={(t) => setSelectedTable((s) => (s === t ? null : t))}
+            />
+            {selectedTable && (() => {
+              const t = effectiveSchema.tables.find((x) => x.name === selectedTable);
+              if (!t) return null;
+              return (
+                <div className="reveal" style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                  <div className="label" style={{ marginBottom: 9, display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ color: "var(--data-strong)" }}>{t.name}</span> · {t.columns.length} columns
+                    <button onClick={() => setSelectedTable(null)} style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11 }}>close</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "0 18px" }}>
+                    {t.columns.map((c) => (
+                      <div key={c.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontFamily: "var(--font-mono)", fontSize: 12.5, padding: "4px 0", borderBottom: "1px solid var(--grid)" }}>
+                        <span style={{ color: "var(--ink)", fontWeight: c.pk ? 600 : 400 }}>
+                          {c.name}{c.pk && <span style={{ color: "var(--data-strong)", fontSize: 9, marginLeft: 5, letterSpacing: "0.08em" }}>PK</span>}
+                        </span>
+                        <span style={{ color: "var(--ink-muted)" }}>{c.type}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </section>

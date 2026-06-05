@@ -24,10 +24,14 @@ export default function SchemaBlueprint({
   schema,
   dimmed,
   active,
+  selected,
+  onSelect,
 }: {
   schema: Schema;
   dimmed: boolean;
   active: string[];
+  selected?: string | null;
+  onSelect?: (table: string) => void;
 }) {
   const scope = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -121,17 +125,23 @@ export default function SchemaBlueprint({
       </g>
 
       {layout.map(({ table, x, y, h, shown }) => {
-        const on = activeSet.has(table.name.toLowerCase()) || hover === table.name;
+        const on = activeSet.has(table.name.toLowerCase()) || hover === table.name || selected === table.name;
+        const lift = hover === table.name ? -3 : 0;
         return (
           <g
             key={table.name}
             className="pdb-node"
             onMouseEnter={() => setHover(table.name)}
             onMouseLeave={() => setHover(null)}
-            style={{ cursor: "pointer", opacity: nodeOpacity(table.name), transition: "opacity 0.2s" }}
+            onClick={() => onSelect?.(table.name)}
+            style={{
+              cursor: "pointer", opacity: nodeOpacity(table.name),
+              transform: `translateY(${lift}px)`, transition: "opacity 0.2s, transform 0.2s var(--ease)",
+            }}
           >
             <rect x={x} y={y} width={W} height={h} rx={3} fill="var(--paper-panel)"
-                  stroke={on ? "var(--line-strong)" : "var(--line)"} strokeWidth={on ? 1.5 : 1}
+                  stroke={selected === table.name ? "var(--data-strong)" : on ? "var(--line-strong)" : "var(--line)"}
+                  strokeWidth={selected === table.name ? 2 : on ? 1.5 : 1}
                   style={{ transition: "stroke 0.2s, stroke-width 0.2s" }} />
             <rect x={x} y={y} width={W} height={HEAD_H} rx={3} fill={on ? "var(--line-strong)" : "var(--line)"} style={{ transition: "fill 0.2s" }} />
             <rect x={x} y={y + HEAD_H - 6} width={W} height={6} fill={on ? "var(--line-strong)" : "var(--line)"} style={{ transition: "fill 0.2s" }} />
