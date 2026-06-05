@@ -6,6 +6,25 @@ from sqlalchemy import inspect as sa_inspect
 from promptdb.db.connection import get_engine
 
 
+def schema_json(engine: Engine | None = None) -> dict:
+    """Structured schema for the UI's ER blueprint: tables, columns (with PK flags), and FK edges."""
+    engine = engine or get_engine()
+    insp = sa_inspect(engine)
+    tables = []
+    edges = []
+    for table in insp.get_table_names():
+        pk = set(insp.get_pk_constraint(table).get("constrained_columns") or [])
+        cols = [
+            {"name": c["name"], "type": str(c["type"]).split("(")[0], "pk": c["name"] in pk}
+            for c in insp.get_columns(table)
+        ]
+        tables.append({"name": table, "columns": cols})
+        for fk in insp.get_foreign_keys(table):
+            if fk.get("referred_table"):
+                edges.append({"from": table, "to": fk["referred_table"]})
+    return {"tables": tables, "edges": edges}
+
+
 def mermaid_er(engine: Engine | None = None) -> str:
     """Return a Mermaid `erDiagram` of tables, columns (with PKs), and foreign-key relations."""
     engine = engine or get_engine()

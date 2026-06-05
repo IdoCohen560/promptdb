@@ -12,12 +12,14 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from promptdb.agent.graph import build_graph
 from promptdb.agent.providers import DEFAULT_PROVIDER, make_llm, model_for
 from promptdb.api.limits import check_demo_allowed, demo_status, record_demo_usage
+from promptdb.data.schema_graph import schema_json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("promptdb")
@@ -28,6 +30,15 @@ RATE_WINDOW = 60.0
 WEB = Path(__file__).resolve().parents[3] / "web"
 
 app = FastAPI(title="PromptDB")
+
+# The Vercel UI is served from a different origin; allow it (default open for the public demo).
+_origins = os.environ.get("PROMPTDB_CORS_ORIGINS", "*")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in _origins.split(",")] if _origins != "*" else ["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 _hits: dict[str, deque] = defaultdict(deque)
 
 
@@ -81,6 +92,12 @@ def health() -> dict:
 def usage(request: Request) -> dict:
     """Remaining free demo quota for this IP — lets the UI show '3 of 5 free queries left'."""
     return demo_status(request.client.host)
+
+
+@app.get("/schema")
+def schema() -> dict:
+    """Structured schema of the active database for the UI's ER blueprint."""
+    return schema_json()
 
 
 @app.post("/query")
