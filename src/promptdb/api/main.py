@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from promptdb.agent.graph import build_graph
 from promptdb.agent.providers import make_llm, model_for
 from promptdb.api.limits import check_demo_allowed, demo_status, record_demo_usage
-from promptdb.api.remote_db import UnsafeDatabaseURL, safe_engine
+from promptdb.api.remote_db import DatabaseUnreachable, UnsafeDatabaseURL, safe_engine
 from promptdb.data.schema_graph import schema_json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -137,6 +137,8 @@ def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> d
         config = _run_config(q)
     except UnsafeDatabaseURL as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except DatabaseUnreachable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
     t0 = time.monotonic()
     result = build_graph().invoke({"question": q.question}, config=config)
     cost = result.get("cost_usd", 0.0)

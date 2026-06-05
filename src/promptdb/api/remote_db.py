@@ -19,8 +19,16 @@ ALLOWED_SCHEMES = {
 }
 
 
+DEFAULT_PORTS = {"postgresql": 5432, "postgres": 5432, "mysql": 3306}
+PROBE_TIMEOUT = 6.0
+
+
 class UnsafeDatabaseURL(ValueError):
     """Raised when a connection string is disallowed or resolves to a non-public address."""
+
+
+class DatabaseUnreachable(ConnectionError):
+    """Raised when the host cannot be reached quickly (so the request fails fast, not in 60s)."""
 
 
 def _assert_public_host(host: str | None) -> None:
@@ -37,10 +45,22 @@ def _assert_public_host(host: str | None) -> None:
             raise UnsafeDatabaseURL("host resolves to a private or reserved address")
 
 
+def _assert_reachable(host: str, port: int) -> None:
+    """Fast TCP probe so an unreachable/filtered host fails in seconds, not on a 60s hang."""
+    try:
+        with socket.create_connection((host, port), timeout=PROBE_TIMEOUT):
+            return
+    except OSError as exc:
+        raise DatabaseUnreachable(f"could not reach {host}:{port} ({exc})")
+
+
 def safe_engine(url: str) -> Engine:
     """Validate a user connection string and return a short-lived read-oriented engine."""
     parsed = urlparse(url)
-    if parsed.scheme.lower() not in ALLOWED_SCHEMES:
+    scheme = parsed.scheme.lower()
+    if scheme not in ALLOWED_SCHEMES:
         raise UnsafeDatabaseURL("only postgresql:// or mysql:// connection strings are allowed")
     _assert_public_host(parsed.hostname)
+    port = parsed.port or DEFAULT_PORTS.get(scheme.split("+")[0], 5432)
+    _assert_reachable(parsed.hostname, port)
     return create_engine(url, connect_args={"connect_timeout": 8}, pool_pre_ping=True)
