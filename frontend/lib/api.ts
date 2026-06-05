@@ -3,6 +3,17 @@ import type { Byo, QueryResult, Schema, Usage } from "./types";
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
 
+/** A stable per-browser id so the demo quota is metered per user, not per shared IP. */
+export function clientId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("promptdb_cid");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("promptdb_cid", id);
+  }
+  return id;
+}
+
 export async function getSchema(): Promise<Schema> {
   const r = await fetch(`${API_BASE}/schema`);
   if (!r.ok) throw new Error(`schema ${r.status}`);
@@ -30,7 +41,7 @@ export async function connectDatabase(databaseUrl: string): Promise<Schema> {
 }
 
 export async function getUsage(): Promise<Usage> {
-  const r = await fetch(`${API_BASE}/usage`);
+  const r = await fetch(`${API_BASE}/usage`, { headers: { "X-Client-Id": clientId() } });
   if (!r.ok) throw new Error(`usage ${r.status}`);
   return r.json();
 }
@@ -96,7 +107,7 @@ export async function postQuery(
 ): Promise<QueryResult> {
   const r = await fetch(`${API_BASE}/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Client-Id": clientId() },
     body: JSON.stringify({ question, ...modelFields(byo), database_url: databaseUrl, sample }),
   });
   const body = await r.json();

@@ -130,10 +130,16 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _identity(request: Request, client_id: str | None) -> str:
+    """Who to meter the demo against: a per-browser client id when present, else the IP.
+    Lets distinct users behind one shared IP each get their own free quota."""
+    return (client_id or "").strip() or request.client.host
+
+
 @app.get("/usage")
-def usage(request: Request) -> dict:
-    """Remaining free demo quota for this IP — lets the UI show '3 of 5 free queries left'."""
-    return demo_status(request.client.host)
+def usage(request: Request, x_client_id: str | None = Header(None)) -> dict:
+    """Remaining free demo quota for this user — lets the UI show '3 of 5 free queries left'."""
+    return demo_status(_identity(request, x_client_id))
 
 
 @app.get("/schema")
@@ -191,13 +197,14 @@ def connect(req: ConnectRequest, request: Request) -> dict:
 
 
 @app.post("/query")
-def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> dict:
+def query(q: Query, request: Request, x_api_key: str | None = Header(None),
+          x_client_id: str | None = Header(None)) -> dict:
     _check_key(x_api_key)
-    ip = request.client.host
-    _check_rate(ip)
+    _check_rate(request.client.host)               # per-IP burst limit
+    who = _identity(request, x_client_id)           # per-user demo quota
     byo = bool(q.provider or q.base_url)  # any BYO model (preset or custom endpoint) bypasses the cap
     if not byo:  # demo path runs on the server key — enforce free-query + daily-budget caps
-        ok, msg = check_demo_allowed(ip)
+        ok, msg = check_demo_allowed(who)
         if not ok:
             raise HTTPException(status_code=402, detail=msg)
     try:
@@ -210,12 +217,12 @@ def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> d
     result = build_graph().invoke({"question": q.question}, config=config)
     cost = result.get("cost_usd", 0.0)
     if not byo:
-        record_demo_usage(ip, cost)
+        record_demo_usage(who, cost)
     return {
         "question": q.question, "sql": result.get("sql"), "columns": result.get("columns"),
         "rows": result.get("rows"), "answer": result.get("answer"), "error": result.get("error"),
         "cost_usd": cost, "latency_s": round(time.monotonic() - t0, 2),
-        "usage": None if byo else demo_status(ip),
+        "usage": None if byo else demo_status(who),
     }
 
 
