@@ -13,6 +13,9 @@ _MUTATION_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|truncate|attach|detach)\b", re.IGNORECASE
 )
 
+# Table referenced after FROM or JOIN (optionally schema-qualified / quoted).
+_TABLE_RE = re.compile(r'\b(?:from|join)\s+["\']?(?:\w+\.)?(\w+)', re.IGNORECASE)
+
 
 def validate_sql(sql: str) -> Optional[str]:
     """Return an error string if `sql` is not a safe single read-only query, else None."""
@@ -28,4 +31,15 @@ def validate_sql(sql: str) -> Optional[str]:
     m = _MUTATION_RE.search(s)
     if m:
         return f"forbidden mutation keyword: '{m.group(1).lower()}'"
+    return None
+
+
+def validate_table_access(sql: str, denied: set[str]) -> Optional[str]:
+    """Reject a query that reads from a denied table (e.g. PII tables on the sample DB)."""
+    if not denied:
+        return None
+    refs = {t.lower() for t in _TABLE_RE.findall(sql)}
+    blocked = refs & denied
+    if blocked:
+        return f"this sample database does not expose: {', '.join(sorted(blocked))}"
     return None

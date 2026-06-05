@@ -212,7 +212,7 @@ export default function Page() {
         {effectiveSchema && (
           <div className="framed" style={{ padding: "18px 18px 20px" }}>
             <span className="framed-tab">
-              {dbUrl ? "your database" : sampleMode ? "sample · bookshop" : "schema"} · {effectiveSchema.tables.length} tables
+              {dbUrl ? "your database" : sampleMode ? "sample · wildfire data" : "schema"} · {effectiveSchema.tables.length} tables
             </span>
             <SchemaBlueprint schema={effectiveSchema} dimmed={running || !!result} active={activeTables} />
           </div>

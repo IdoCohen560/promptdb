@@ -13,7 +13,7 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from promptdb.agent.guardrails import validate_sql
+from promptdb.agent.guardrails import validate_sql, validate_table_access
 from promptdb.agent.state import AgentState
 from promptdb.db.connection import get_engine, get_schema_text, run_select
 from promptdb.observability.cost import cost_usd
@@ -104,8 +104,13 @@ def sql_writer(state: AgentState, config=None) -> dict:
     return {"sql": parsed.sql, "attempts": attempts, "error": None, "cost_usd": cost}
 
 
-def sql_validator(state: AgentState) -> dict:
-    return {"error": validate_sql(state["sql"])}
+def sql_validator(state: AgentState, config=None) -> dict:
+    err = validate_sql(state["sql"])
+    if not err:
+        denied = ((config or {}).get("configurable", {}) if config else {}).get("denied_tables")
+        if denied:
+            err = validate_table_access(state["sql"], denied)
+    return {"error": err}
 
 
 def sql_executor(state: AgentState, config=None) -> dict:

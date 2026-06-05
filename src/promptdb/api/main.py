@@ -29,7 +29,7 @@ from promptdb.api.remote_db import (
     _assert_public_host,
     safe_engine,
 )
-from promptdb.api.sample_seed import sample_url
+from promptdb.api.sample_seed import denied_tables, sample_tables, sample_url
 from promptdb.data.schema_graph import schema_json
 
 
@@ -95,6 +95,7 @@ def _run_config(q: "Query") -> dict | None:
         cfg["engine"] = safe_engine(q.database_url)  # raises UnsafeDatabaseURL on a bad host
     elif q.sample and sample_url():
         cfg["engine"] = create_engine(sample_url(), connect_args={"connect_timeout": 10})
+        cfg["denied_tables"] = denied_tables()  # block PII tables on the sample DB
     return {"configurable": cfg} if cfg else None
 
 
@@ -152,7 +153,9 @@ def sample() -> dict:
     if not url:
         raise HTTPException(status_code=404, detail="no sample database configured")
     try:
-        return {"schema": schema_json(create_engine(url, connect_args={"connect_timeout": 10}))}
+        allow = sample_tables()
+        eng = create_engine(url, connect_args={"connect_timeout": 10})
+        return {"schema": schema_json(eng, only=set(allow) if allow else None)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"sample database unavailable: {exc}")
 

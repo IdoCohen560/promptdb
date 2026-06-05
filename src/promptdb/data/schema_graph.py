@@ -6,16 +6,20 @@ from sqlalchemy import inspect as sa_inspect
 from promptdb.db.connection import get_engine
 
 
-def schema_json(engine: Engine | None = None) -> dict:
+def schema_json(engine: Engine | None = None, only: set[str] | None = None) -> dict:
     """Structured schema for the UI's ER blueprint: tables, columns (with PK flags), and FK edges.
 
+    If `only` is given, restrict to those tables (used to hide PII tables on the sample DB).
     Tolerant of restricted read-only roles: a table that can't be reflected (e.g. a locked-down
     user without catalog access) is skipped rather than failing the whole introspection."""
     engine = engine or get_engine()
     insp = sa_inspect(engine)
+    allow = {t.lower() for t in only} if only else None
     tables = []
     edges = []
     for table in insp.get_table_names():
+        if allow is not None and table.lower() not in allow:
+            continue
         try:
             pk = set(insp.get_pk_constraint(table).get("constrained_columns") or [])
             cols = [

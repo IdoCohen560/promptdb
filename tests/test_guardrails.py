@@ -3,8 +3,19 @@
 from langgraph.graph import END, START, StateGraph
 
 from promptdb.agent import graph as G
-from promptdb.agent.guardrails import validate_sql
+from promptdb.agent.guardrails import validate_sql, validate_table_access
 from promptdb.agent.state import AgentState
+
+
+def test_denied_table_access_blocked():
+    denied = {"users", "user_locations"}
+    assert validate_table_access("SELECT * FROM zone_risk_cache", denied) is None
+    assert validate_table_access("SELECT email FROM users", denied) is not None
+    assert validate_table_access("SELECT z.id FROM zone z JOIN user_locations ul ON z.id=ul.zone_id", denied) is not None
+    # case-insensitive + schema-qualified
+    assert validate_table_access("SELECT * FROM public.USERS", denied) is not None
+    # no denylist → allow anything
+    assert validate_table_access("SELECT * FROM users", set()) is None
 
 
 def test_validator_allows_select_and_with():
