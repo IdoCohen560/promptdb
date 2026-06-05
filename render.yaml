@@ -1,0 +1,29 @@
+# Render Blueprint for the PromptDB agent API (the Python service).
+# The Next.js UI deploys separately to Vercel and points at this service via NEXT_PUBLIC_API_BASE.
+# Secrets (ANTHROPIC_API_KEY) and the CORS origin are set in the dashboard, never committed.
+services:
+  - type: web
+    name: promptdb-api
+    runtime: docker
+    repo: https://github.com/IdoCohen560/promptdb
+    branch: master
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: PROMPTDB_MODEL
+        value: claude-haiku-4-5          # cheap, 91.7% on Chinook — stretches the demo budget
+      - key: PROMPTDB_DEMO_QUERIES_PER_IP
+        value: "5"
+      - key: PROMPTDB_DAILY_SPEND_USD
+        value: "1.0"
+      - key: PROMPTDB_USAGE_FILE
+        value: /data/usage.json          # on the persistent disk so caps survive restarts
+      - key: ANTHROPIC_API_KEY
+        sync: false                       # set in dashboard — secret
+      - key: PROMPTDB_CORS_ORIGINS
+        sync: false                       # set to the Vercel URL after the UI deploys
+    disk:
+      name: promptdb-data
+      mountPath: /data
+      sizeGB: 1
