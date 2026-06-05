@@ -24,7 +24,6 @@ const CUSTOM_EXAMPLES = [
   "list the tables and their row counts",
   "what columns does the largest table have?",
 ];
-const CUSTOM_STARTER = "how many rows are in each table?";
 
 const ALL_PENDING = (): Record<StageNode, StageStatus> =>
   Object.fromEntries(STAGES.map((s) => [s.node, "pending"])) as Record<StageNode, StageStatus>;
@@ -148,7 +147,11 @@ export default function Page() {
           onCustom={() => { setSource("custom"); setDbUrl(null); setCustomSchema(null); setResult(null); setIsExample(false); setSelectedTable(null); }}
           onConnected={(url, sch) => {
             setSource("custom"); setDbUrl(url); setCustomSchema(sch); setSelectedTable(null);
-            run(CUSTOM_STARTER, { source: "custom", dbUrl: url });  // worked example on their data
+            // fast worked example: count one real table (single query, not a 14-table union)
+            const starter = sch.tables[0]
+              ? `how many rows are in the ${sch.tables[0].name} table?`
+              : "how many tables are in this database?";
+            run(starter, { source: "custom", dbUrl: url });
           }}
         />
         <ProviderPicker byo={byo} setByo={setByo} usage={usage} />
