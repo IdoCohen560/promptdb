@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "promptdb": {
+      "command": "promptdb-mcp",
+      "env": {
+        "PROMPTDB_DATABASE_URL": "sqlite:////absolute/path/to/your.db"
+      }
+    }
+  }
+}
