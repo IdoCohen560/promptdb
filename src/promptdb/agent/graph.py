@@ -6,6 +6,7 @@ with a self-correction loop: a validation or execution error routes back to sql_
 """
 
 import os
+import re
 from functools import lru_cache
 
 from dotenv import load_dotenv
@@ -123,10 +124,40 @@ def sql_validator(state: AgentState, config=None) -> dict:
     return {"error": err}
 
 
-def sql_executor(state: AgentState, config=None) -> dict:
+_FROM_RE = re.compile(r"\bfrom\s+[\"'`]?(\w+)", re.IGNORECASE)
+# an equality filter on a string literal, e.g.  WHERE category = 'wildfire'  /  t.status = 'x'
+_EQ_RE = re.compile(r"\b(?:\w+\.)?(\w+)\s*=\s*'[^']*'", re.IGNORECASE)
+
+
+def _empty_hint(engine, sql: str) -> dict | None:
+    """When a filtered query returns nothing, surface the filtered column's real values so the
+    answer can say 'did you mean…' instead of looking broken. Best-effort; silent on failure."""
+    fm = _FROM_RE.search(sql)
+    eq = _EQ_RE.search(sql)
+    if not fm or not eq:
+        return None
+    table, col = fm.group(1), eq.group(1)
     try:
-        cols, rows = run_select(_engine_for(config), state["sql"])
-        return {"columns": cols, "rows": rows, "error": None}
+        _, rows = run_select(
+            engine, f"SELECT {col}, COUNT(*) AS n FROM {table} GROUP BY {col} ORDER BY n DESC LIMIT 12"
+        )
+        if rows:
+            return {"column": col, "values": [(str(r[0]), r[1]) for r in rows]}
+    except Exception:  # noqa: BLE001 — hint is optional
+        return None
+    return None
+
+
+def sql_executor(state: AgentState, config=None) -> dict:
+    engine = _engine_for(config)
+    try:
+        cols, rows = run_select(engine, state["sql"])
+        out: dict = {"columns": cols, "rows": rows, "error": None}
+        if not rows:  # 0 rows often means a filter value that doesn't exist — gather the real values
+            hint = _empty_hint(engine, state["sql"])
+            if hint:
+                out["hint"] = hint
+        return out
     except Exception as exc:  # noqa: BLE001 — surface any DB error to the agent for retry
         return {"error": str(exc)}
 
@@ -144,7 +175,28 @@ def answer_synthesizer(state: AgentState, config=None) -> dict:
             f"Last error: {state['error']}"
         }
     llm, model_name = _llm_for(config)
-    preview = _render(state.get("columns", []), state.get("rows", []))
+    rows = state.get("rows", [])
+    if not rows:
+        # No rows usually means a filter value that isn't in the data — guide the user, don't alarm them.
+        hint = state.get("hint")
+        hint_txt = ""
+        if hint:
+            vals = ", ".join(f"{v} ({n})" for v, n in hint["values"])
+            hint_txt = f"\nThe '{hint['column']}' column actually contains: {vals}."
+        prompt = (
+            f"Question: {state['question']}\n"
+            f"SQL used: {state['sql']}\n"
+            f"The query ran successfully but returned NO rows.{hint_txt}\n\n"
+            "In 1-3 sentences: say no rows matched, name the specific filter the SQL applied, and "
+            "suggest how to rephrase (use one of the real values above if given, or drop the filter). "
+            "Be helpful and concrete. Never suggest the database is broken or empty overall."
+        )
+        resp = llm.invoke(prompt)
+        usage = getattr(resp, "usage_metadata", None) or {}
+        answer = resp.content if isinstance(resp.content, str) else str(resp.content)
+        return {"answer": answer, "cost_usd": state.get("cost_usd", 0.0) + cost_usd(usage, model_name)}
+
+    preview = _render(state.get("columns", []), rows)
     prompt = (
         f"Question: {state['question']}\n"
         f"SQL used: {state['sql']}\n"
