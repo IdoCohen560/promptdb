@@ -1,17 +1,13 @@
 """Self-seeding sample database (a synthetic bookshop — no real data).
 
-The hosted server seeds this once on first use (it runs on the same network as the DB, so it can
-reach it). It creates a read-only role whose credentials are safe to hand to demo visitors. The
-admin connection string is server-only; visitors get the read-only URL.
+Free-tier Render Postgres is reachable only on Render's internal network, so the sample is used
+server-side only: the connection string never leaves the server, and the agent's SELECT-only
+guardrail is what keeps it read-only. The server seeds it once on first use (idempotent).
 """
 
 import os
 
 from sqlalchemy import create_engine, text
-
-RO_USER = "sample_viewer"
-RO_PW = "promptdb_demo_ro"  # intentionally public — read-only sample
-RO_DB = "sampledb"
 
 _TABLES = [
     "CREATE TABLE IF NOT EXISTS author (id INT PRIMARY KEY, name TEXT, country TEXT)",
@@ -29,37 +25,25 @@ _DATA = [
     "INSERT INTO order_item VALUES (1,1,1,2),(2,1,6,1),(3,2,3,1),(4,3,11,3),(5,4,5,2),(6,4,9,1),(7,5,4,1),(8,6,6,2),(9,7,2,1),(10,7,12,2),(11,8,1,1),(12,9,7,3),(13,10,10,1),(14,11,9,2),(15,11,3,1),(16,12,11,1),(17,12,6,1),(18,2,8,2),(19,5,2,1),(20,9,12,1)",
 ]
 
-
-def _readonly_url(admin_url: str) -> str:
-    host = admin_url.split("@", 1)[1].split("?", 1)[0].split("/", 1)[0]
-    return f"postgresql://{RO_USER}:{RO_PW}@{host}/{RO_DB}?sslmode=require"
+_cached_url: str | None = None
 
 
 def ensure_seeded(admin_url: str) -> str:
-    """Seed the bookshop + read-only role if not present (idempotent). Returns the read-only URL."""
+    """Seed the bookshop if absent (idempotent). Returns the (server-side) connection URL."""
     eng = create_engine(admin_url, connect_args={"connect_timeout": 10})
     with eng.begin() as conn:
-        already = conn.execute(text("SELECT to_regclass('public.book')")).scalar()
-        if not already:
+        if not conn.execute(text("SELECT to_regclass('public.book')")).scalar():
             for stmt in _TABLES + _DATA:
                 conn.execute(text(stmt))
-        conn.execute(text(
-            f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{RO_USER}') "
-            f"THEN CREATE ROLE {RO_USER} LOGIN PASSWORD '{RO_PW}'; END IF; END $$;"
-        ))
-        conn.execute(text(f"GRANT CONNECT ON DATABASE {RO_DB} TO {RO_USER}"))
-        conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {RO_USER}"))
-        conn.execute(text(f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {RO_USER}"))
-        conn.execute(text(
-            f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {RO_USER}"
-        ))
     eng.dispose()
-    return _readonly_url(admin_url)
+    return admin_url
 
 
 def sample_url() -> str | None:
-    """Resolve the read-only sample URL, seeding on first use. Returns None if unconfigured."""
+    """Resolve the server-side sample URL, seeding on first use (cached). None if unconfigured."""
+    global _cached_url
+    if _cached_url:
+        return _cached_url
     admin = os.environ.get("PROMPTDB_SAMPLE_ADMIN_URL")
-    if admin:
-        return ensure_seeded(admin)
-    return os.environ.get("PROMPTDB_SAMPLE_DB_URL") or None
+    _cached_url = ensure_seeded(admin) if admin else os.environ.get("PROMPTDB_SAMPLE_DB_URL")
+    return _cached_url

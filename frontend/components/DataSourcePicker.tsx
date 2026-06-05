@@ -7,14 +7,18 @@ import type { Schema } from "@/lib/types";
  *  private/local DBs use the local connector, since no hosted page can reach them. */
 export default function DataSourcePicker({
   dbUrl,
+  custom,
   onDemo,
   onConnected,
+  onSample,
 }: {
   dbUrl: string | null;
+  custom: boolean;
   onDemo: () => void;
   onConnected: (url: string, schema: Schema) => void;
+  onSample: (schema: Schema) => void;
 }) {
-  const [tab, setTab] = useState<"demo" | "custom">(dbUrl ? "custom" : "demo");
+  const [tab, setTab] = useState<"demo" | "custom">(custom ? "custom" : "demo");
   const [url, setUrl] = useState(dbUrl ?? "");
   const [state, setState] = useState<"idle" | "connecting" | "error">("idle");
   const [error, setError] = useState("");
@@ -38,10 +42,9 @@ export default function DataSourcePicker({
     setState("connecting");
     setError("");
     try {
-      const { database_url, schema } = await getSample();
-      setUrl(database_url);
+      const schema = await getSample();
       setState("idle");
-      onConnected(database_url, schema);
+      onSample(schema);
     } catch (e) {
       setState("error");
       setError(e instanceof Error ? e.message : "sample unavailable");
@@ -58,6 +61,7 @@ export default function DataSourcePicker({
         <button onClick={() => setTab("custom")} aria-pressed={tab === "custom"} style={chip(tab === "custom")}>
           Your database
           {dbUrl && <span style={{ color: "var(--ok)", marginLeft: 8 }}>● connected</span>}
+          {!dbUrl && custom && <span style={{ color: "var(--ok)", marginLeft: 8 }}>● sample</span>}
         </button>
       </div>
 

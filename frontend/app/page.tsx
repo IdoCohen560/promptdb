@@ -25,6 +25,7 @@ export default function Page() {
   const [question, setQuestion] = useState("");
   const [byo, setByo] = useState<Byo>(null);
   const [dbUrl, setDbUrl] = useState<string | null>(null);
+  const [sampleMode, setSampleMode] = useState(false);
   const [customSchema, setCustomSchema] = useState<Schema | null>(null);
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<Record<StageNode, StageStatus>>(ALL_PENDING);
@@ -66,11 +67,11 @@ export default function Page() {
       setAttempts(1);
       setStatus({ ...ALL_PENDING(), schema_retriever: "active" });
 
-      if (byo || dbUrl) {
-        // BYO key and/or a connected database go through POST (the connection string can't ride a
-        // GET stream); reveal stages client-side so the flow still reads as a pipeline.
+      if (byo || dbUrl || sampleMode) {
+        // BYO key and/or a connected (or sample) database go through POST (can't ride a GET
+        // stream); reveal stages client-side so the flow still reads as a pipeline.
         try {
-          const res = await postQuery(q, byo, dbUrl);
+          const res = await postQuery(q, byo, dbUrl, sampleMode);
           for (let i = 0; i < STAGES.length; i++) {
             await new Promise((r) => setTimeout(r, 160));
             advance(STAGES[i].node);
@@ -124,7 +125,7 @@ export default function Page() {
         },
       );
     },
-    [byo, dbUrl, running, advance],
+    [byo, dbUrl, sampleMode, running, advance],
   );
 
   return (
@@ -202,14 +203,16 @@ export default function Page() {
       <section style={{ marginTop: 34, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr)" }}>
         <DataSourcePicker
           dbUrl={dbUrl}
-          onDemo={() => { setDbUrl(null); setCustomSchema(null); setResult(null); }}
-          onConnected={(url, sch) => { setDbUrl(url); setCustomSchema(sch); setResult(null); }}
+          custom={!!dbUrl || sampleMode}
+          onDemo={() => { setDbUrl(null); setSampleMode(false); setCustomSchema(null); setResult(null); }}
+          onConnected={(url, sch) => { setDbUrl(url); setSampleMode(false); setCustomSchema(sch); setResult(null); }}
+          onSample={(sch) => { setSampleMode(true); setDbUrl(null); setCustomSchema(sch); setResult(null); }}
         />
         <ProviderPicker byo={byo} setByo={setByo} usage={usage} />
         {effectiveSchema && (
           <div className="framed" style={{ padding: "18px 18px 20px" }}>
             <span className="framed-tab">
-              {dbUrl ? "your database" : "schema"} · {effectiveSchema.tables.length} tables
+              {dbUrl ? "your database" : sampleMode ? "sample · bookshop" : "schema"} · {effectiveSchema.tables.length} tables
             </span>
             <SchemaBlueprint schema={effectiveSchema} dimmed={running || !!result} active={activeTables} />
           </div>

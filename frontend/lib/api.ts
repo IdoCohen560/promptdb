@@ -9,12 +9,12 @@ export async function getSchema(): Promise<Schema> {
   return r.json();
 }
 
-/** A ready-to-use read-only sample cloud database (so visitors can try the connect flow). */
-export async function getSample(): Promise<{ database_url: string; schema: Schema }> {
+/** A ready-to-use sample database (server-side); returns just its schema for the blueprint. */
+export async function getSample(): Promise<Schema> {
   const r = await fetch(`${API_BASE}/sample`);
   const body = await r.json();
   if (!r.ok) throw new Error(body.detail || `sample ${r.status}`);
-  return body;
+  return body.schema;
 }
 
 /** Validate a user connection string and load its schema (SSRF-guarded server-side). */
@@ -92,11 +92,12 @@ export async function postQuery(
   question: string,
   byo: Byo,
   databaseUrl: string | null,
+  sample = false,
 ): Promise<QueryResult> {
   const r = await fetch(`${API_BASE}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, ...modelFields(byo), database_url: databaseUrl }),
+    body: JSON.stringify({ question, ...modelFields(byo), database_url: databaseUrl, sample }),
   });
   const body = await r.json();
   if (!r.ok) throw new Error(body.detail || `query ${r.status}`);

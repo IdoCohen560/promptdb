@@ -18,6 +18,8 @@ from pydantic import BaseModel
 
 from urllib.parse import urlparse
 
+from sqlalchemy import create_engine
+
 from promptdb.agent.graph import build_graph
 from promptdb.agent.providers import PRESETS, list_models, make_llm, model_for
 from promptdb.api.limits import check_demo_allowed, demo_status, record_demo_usage
@@ -63,6 +65,7 @@ class Query(BaseModel):
     api_key: str | None = None    # BYO key — encapsulated in the model client, never stored
     base_url: str | None = None   # any OpenAI-compatible endpoint (OpenRouter, OpenAI, custom)
     database_url: str | None = None  # connect your own cloud DB (read-only); None = demo Chinook
+    sample: bool = False          # query the built-in sample bookshop DB (server-side)
 
 
 class ConnectRequest(BaseModel):
@@ -90,6 +93,8 @@ def _run_config(q: "Query") -> dict | None:
         cfg["model_name"] = model_for(q.provider, q.model)
     if q.database_url:
         cfg["engine"] = safe_engine(q.database_url)  # raises UnsafeDatabaseURL on a bad host
+    elif q.sample and sample_url():
+        cfg["engine"] = create_engine(sample_url(), connect_args={"connect_timeout": 10})
     return {"configurable": cfg} if cfg else None
 
 
@@ -138,16 +143,16 @@ def schema() -> dict:
 
 @app.get("/sample")
 def sample() -> dict:
-    """A ready-to-use read-only sample cloud database (a synthetic bookshop), so visitors can try
-    the connect flow without their own DB. Self-seeds on first use; returns its read-only URL + schema."""
+    """A ready-to-use sample database (a synthetic bookshop) so visitors can try the connect flow
+    without their own DB. Server-side only (free-tier DB is internal-network only); returns schema."""
     try:
-        url = sample_url()  # seeds on first call (server-side), returns the read-only connection string
+        url = sample_url()  # seeds on first call (server-side, idempotent)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"sample database unavailable: {exc}")
     if not url:
         raise HTTPException(status_code=404, detail="no sample database configured")
     try:
-        return {"database_url": url, "schema": schema_json(safe_engine(url))}
+        return {"schema": schema_json(create_engine(url, connect_args={"connect_timeout": 10}))}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"sample database unavailable: {exc}")
 
