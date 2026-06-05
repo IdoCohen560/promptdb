@@ -5,6 +5,7 @@ import SchemaBlueprint from "@/components/SchemaBlueprint";
 import FlowRail, { type StageStatus } from "@/components/FlowRail";
 import ResultTable from "@/components/ResultTable";
 import ModelPicker from "@/components/ModelPicker";
+import DataSourcePicker from "@/components/DataSourcePicker";
 import { getSchema, getUsage, postQuery, streamQuery } from "@/lib/api";
 import { STAGES, type Byo, type QueryResult, type Schema, type StageNode, type Usage } from "@/lib/types";
 
@@ -23,6 +24,8 @@ export default function Page() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [question, setQuestion] = useState("");
   const [byo, setByo] = useState<Byo>(null);
+  const [dbUrl, setDbUrl] = useState<string | null>(null);
+  const [customSchema, setCustomSchema] = useState<Schema | null>(null);
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<Record<StageNode, StageStatus>>(ALL_PENDING);
   const [attempts, setAttempts] = useState(1);
@@ -35,11 +38,13 @@ export default function Page() {
     getUsage().then(setUsage).catch(() => {});
   }, []);
 
+  const effectiveSchema = customSchema ?? schema;
+
   const activeTables = useMemo(() => {
-    if (!schema || !result?.sql) return [];
+    if (!effectiveSchema || !result?.sql) return [];
     const s = result.sql.toLowerCase();
-    return schema.tables.filter((t) => s.includes(t.name.toLowerCase())).map((t) => t.name);
-  }, [schema, result?.sql]);
+    return effectiveSchema.tables.filter((t) => s.includes(t.name.toLowerCase())).map((t) => t.name);
+  }, [effectiveSchema, result?.sql]);
 
   const advance = useCallback((doneNode: StageNode) => {
     setStatus((prev) => {
@@ -61,15 +66,17 @@ export default function Page() {
       setAttempts(1);
       setStatus({ ...ALL_PENDING(), schema_retriever: "active" });
 
-      if (byo) {
-        // BYO: one POST, then a quick schematic reveal so the flow still reads as a pipeline.
+      if (byo || dbUrl) {
+        // BYO key and/or a connected database go through POST (the connection string can't ride a
+        // GET stream); reveal stages client-side so the flow still reads as a pipeline.
         try {
-          const res = await postQuery(q, byo);
+          const res = await postQuery(q, byo, dbUrl);
           for (let i = 0; i < STAGES.length; i++) {
             await new Promise((r) => setTimeout(r, 160));
             advance(STAGES[i].node);
           }
           setResult(res);
+          if (res.usage) setUsage(res.usage);
         } catch (e) {
           setStatus(ALL_PENDING());
           setNotice(e instanceof Error ? e.message : "Query failed.");
@@ -79,7 +86,7 @@ export default function Page() {
         return;
       }
 
-      // Demo: live SSE stream.
+      // Demo (bundled DB, server key): live SSE stream.
       let writerSeen = 0;
       const partial: Partial<QueryResult> = { question: q };
       cancelRef.current = streamQuery(
@@ -117,7 +124,7 @@ export default function Page() {
         },
       );
     },
-    [byo, running, advance],
+    [byo, dbUrl, running, advance],
   );
 
   return (
@@ -193,11 +200,18 @@ export default function Page() {
       )}
 
       <section style={{ marginTop: 34, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <DataSourcePicker
+          dbUrl={dbUrl}
+          onDemo={() => { setDbUrl(null); setCustomSchema(null); setResult(null); }}
+          onConnected={(url, sch) => { setDbUrl(url); setCustomSchema(sch); setResult(null); }}
+        />
         <ModelPicker byo={byo} setByo={setByo} usage={usage} />
-        {schema && (
+        {effectiveSchema && (
           <div className="framed" style={{ padding: "18px 18px 20px" }}>
-            <span className="framed-tab">schema · {schema.tables.length} tables</span>
-            <SchemaBlueprint schema={schema} dimmed={running || !!result} active={activeTables} />
+            <span className="framed-tab">
+              {dbUrl ? "your database" : "schema"} · {effectiveSchema.tables.length} tables
+            </span>
+            <SchemaBlueprint schema={effectiveSchema} dimmed={running || !!result} active={activeTables} />
           </div>
         )}
       </section>

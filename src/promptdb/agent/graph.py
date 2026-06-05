@@ -29,6 +29,13 @@ def get_llm() -> ChatAnthropic:
     return ChatAnthropic(model=model, temperature=0, max_tokens=1024)
 
 
+def _engine_for(config):
+    """Resolve the database engine: a per-request engine injected via config (a connected
+    user database), else the server's default engine."""
+    cfg = (config or {}).get("configurable", {}) if config else {}
+    return cfg.get("engine") or get_engine()
+
+
 def _llm_for(config) -> tuple[object, str]:
     """Resolve the model for this run: a per-request client injected via
     `config.configurable` (BYO key/provider), else the default Anthropic client.
@@ -79,8 +86,8 @@ def build_sql_prompt(
     return prompt
 
 
-def schema_retriever(state: AgentState) -> dict:
-    return {"schema": get_schema_text(get_engine())}
+def schema_retriever(state: AgentState, config=None) -> dict:
+    return {"schema": get_schema_text(_engine_for(config))}
 
 
 def sql_writer(state: AgentState, config=None) -> dict:
@@ -101,9 +108,9 @@ def sql_validator(state: AgentState) -> dict:
     return {"error": validate_sql(state["sql"])}
 
 
-def sql_executor(state: AgentState) -> dict:
+def sql_executor(state: AgentState, config=None) -> dict:
     try:
-        cols, rows = run_select(get_engine(), state["sql"])
+        cols, rows = run_select(_engine_for(config), state["sql"])
         return {"columns": cols, "rows": rows, "error": None}
     except Exception as exc:  # noqa: BLE001 — surface any DB error to the agent for retry
         return {"error": str(exc)}

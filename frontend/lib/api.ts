@@ -9,6 +9,18 @@ export async function getSchema(): Promise<Schema> {
   return r.json();
 }
 
+/** Validate a user connection string and load its schema (SSRF-guarded server-side). */
+export async function connectDatabase(databaseUrl: string): Promise<Schema> {
+  const r = await fetch(`${API_BASE}/connect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ database_url: databaseUrl }),
+  });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.detail || `connect ${r.status}`);
+  return body.schema;
+}
+
 export async function getUsage(): Promise<Usage> {
   const r = await fetch(`${API_BASE}/usage`);
   if (!r.ok) throw new Error(`usage ${r.status}`);
@@ -42,8 +54,13 @@ export function streamQuery(
   return () => es.close();
 }
 
-/** BYO-key path: a single POST (key travels in the body, never the URL). */
-export async function postQuery(question: string, byo: Byo): Promise<QueryResult> {
+/** POST path (used for BYO key and/or a connected database). Key + connection string travel in
+ *  the body, never the URL. */
+export async function postQuery(
+  question: string,
+  byo: Byo,
+  databaseUrl: string | null,
+): Promise<QueryResult> {
   const r = await fetch(`${API_BASE}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,6 +69,7 @@ export async function postQuery(question: string, byo: Byo): Promise<QueryResult
       provider: byo?.provider ?? null,
       model: byo?.model || null,
       api_key: byo?.apiKey || null,
+      database_url: databaseUrl,
     }),
   });
   const body = await r.json();

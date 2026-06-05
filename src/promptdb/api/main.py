@@ -17,8 +17,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from promptdb.agent.graph import build_graph
-from promptdb.agent.providers import DEFAULT_PROVIDER, make_llm, model_for
+from promptdb.agent.providers import make_llm, model_for
 from promptdb.api.limits import check_demo_allowed, demo_status, record_demo_usage
+from promptdb.api.remote_db import UnsafeDatabaseURL, safe_engine
 from promptdb.data.schema_graph import schema_json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -47,14 +48,22 @@ class Query(BaseModel):
     provider: str | None = None   # BYO: "anthropic" | "openai" | "ollama"; None = demo (server key)
     model: str | None = None
     api_key: str | None = None    # BYO key — encapsulated in the model client, never stored
+    database_url: str | None = None  # connect your own cloud DB (read-only); None = demo Chinook
+
+
+class ConnectRequest(BaseModel):
+    database_url: str
 
 
 def _run_config(q: "Query") -> dict | None:
-    """Build a LangGraph config for a BYO-key request, or None for the demo path."""
-    if not q.provider:
-        return None
-    llm = make_llm(q.provider, q.model, q.api_key)
-    return {"configurable": {"llm": llm, "model_name": model_for(q.provider, q.model)}}
+    """Build a LangGraph config: a BYO model and/or a connected database. None for the pure demo."""
+    cfg: dict = {}
+    if q.provider:
+        cfg["llm"] = make_llm(q.provider, q.model, q.api_key)
+        cfg["model_name"] = model_for(q.provider, q.model)
+    if q.database_url:
+        cfg["engine"] = safe_engine(q.database_url)  # raises UnsafeDatabaseURL on a bad host
+    return {"configurable": cfg} if cfg else None
 
 
 def _check_key(key: str | None) -> None:
@@ -100,6 +109,20 @@ def schema() -> dict:
     return schema_json()
 
 
+@app.post("/connect")
+def connect(req: ConnectRequest, request: Request) -> dict:
+    """Validate a user connection string and return its schema, so the UI can render the ER
+    blueprint and confirm connectivity before any query runs. SSRF-guarded; read-only intent."""
+    _check_rate(request.client.host)
+    try:
+        eng = safe_engine(req.database_url)
+        return {"ok": True, "schema": schema_json(eng)}
+    except UnsafeDatabaseURL as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface connection failures to the UI
+        raise HTTPException(status_code=502, detail=f"could not connect: {exc}")
+
+
 @app.post("/query")
 def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> dict:
     _check_key(x_api_key)
@@ -110,8 +133,12 @@ def query(q: Query, request: Request, x_api_key: str | None = Header(None)) -> d
         ok, msg = check_demo_allowed(ip)
         if not ok:
             raise HTTPException(status_code=402, detail=msg)
+    try:
+        config = _run_config(q)
+    except UnsafeDatabaseURL as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     t0 = time.monotonic()
-    result = build_graph().invoke({"question": q.question}, config=_run_config(q))
+    result = build_graph().invoke({"question": q.question}, config=config)
     cost = result.get("cost_usd", 0.0)
     if not byo:
         record_demo_usage(ip, cost)
