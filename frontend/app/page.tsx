@@ -12,10 +12,10 @@ import { STAGES, type Byo, type QueryResult, type Schema, type StageNode, type U
 const FIRESCOPE_SITE = "https://firescope.netlify.app";
 
 const EXAMPLES = [
-  "how many wildfire news articles were published each month?",
-  "how many news articles are there in total?",
+  "how many news articles were published each month?",
+  "how many news articles are there per category?",
+  "how many users are registered, grouped by role?",
   "how many distinct days have published articles?",
-  "what columns are in the zone risk cache?",
 ];
 
 // schema-agnostic starters for a connected user database
@@ -33,7 +33,7 @@ const ALL_DONE = (): Record<StageNode, StageStatus> =>
 // A real, pre-computed run against the FireScope demo DB, shown on load so visitors see the agent
 // working instantly (no cost). Replaced the moment they run something live.
 const DEMO_EXAMPLE: QueryResult = {
-  question: "how many wildfire news articles were published each month?",
+  question: "how many news articles were published each month?",
   sql: "SELECT DATE_TRUNC('month', published_at)::DATE AS month, COUNT(*) AS count\nFROM news_articles\nWHERE published_at IS NOT NULL\nGROUP BY DATE_TRUNC('month', published_at)\nORDER BY month DESC\nLIMIT 6",
   columns: ["month", "count"],
   rows: [["2026-06-01", 17], ["2026-05-01", 156], ["2026-04-01", 58], ["2026-03-01", 14]],
