@@ -1,12 +1,18 @@
 # Use your own database
 
-The hosted demo queries a bundled sample database. To query **your** data, run the local connector
-so the agent operates where your data lives. Your database credentials and rows never leave your
-machine; only the schema and your own query results are sent to the model.
+Two ways, by where your database lives:
 
-This is the [Model Context Protocol](https://modelcontextprotocol.io) pattern: a small server runs
-locally and exposes read-only database tools to any MCP client (Claude Desktop, Cursor) or to the
-PromptDB CLI directly.
+- **Cloud-reachable DB** (Postgres/MySQL on Supabase, Neon, RDS, Render, …) — paste a **read-only**
+  connection string into the hosted demo's "Your database" tab. The server validates it (SSRF-guarded),
+  introspects the schema, suggests questions grounded in it, and queries it server-side. The string is
+  used per request and not stored. This page covers the local path below; the in-browser path needs no setup.
+- **Private / local DB** (laptop, behind a firewall) — a hosted page can't reach it, so run the **local
+  connector** where the data lives. Credentials and rows never leave your machine; only the schema and
+  your own query results reach the model.
+
+The local connector is the [Model Context Protocol](https://modelcontextprotocol.io) pattern: a small
+server runs locally and exposes read-only database tools to any MCP client (Claude Desktop, Cursor) or
+to the PromptDB CLI directly.
 
 ## Install
 

@@ -43,32 +43,48 @@ Three independent layers, any one of which is sufficient:
 
 See [SECURITY.md](../SECURITY.md) for the threat model.
 
-## Provider router
+## Provider router — any model
 
-`agent/providers.py` builds a chat model per request from `(provider, model, api_key)` with lazy
-imports — the base install needs only `langchain-anthropic`; OpenAI and Ollama load only if used.
+`agent/providers.py` builds a chat model per request. Any **OpenAI-compatible endpoint** plugs in via
+`base_url` + `api_key` + `model`, so effectively any model works: **OpenRouter** (one key, hundreds of
+models including every open-source one), OpenAI, vLLM, llama.cpp, and local Ollama all expose an
+OpenAI-style `/v1`. Native Anthropic is the demo default. Imports are lazy — the base install needs only
+`langchain-anthropic`. `/models` lists a provider's catalog live (its `/models` route), SSRF-guarded.
 
-The per-request client is injected through LangGraph's `config.configurable`, **not** through
-`AgentState`. That keeps a bring-your-own key encapsulated in the model client and out of graph
-state and LangSmith traces. With no per-request config, nodes fall back to the env-configured
-default (`get_llm()`), so the CLI and the eval harness are unchanged.
+The per-request client is injected through LangGraph's `config.configurable`, **not** `AgentState`,
+so a bring-your-own key stays encapsulated in the client and out of graph state and LangSmith traces.
+With no per-request config, nodes fall back to the env default (`get_llm()`) — CLI and evals unchanged.
 
-Cost lookup (`observability/cost.py`) prices known Anthropic and OpenAI models and treats local
-Ollama families (`gemma`, `llama`, `mistral`, …) as free.
+`sql_writer` is **dialect-aware**: it reads the connected engine's dialect and tells the model to use
+PostgreSQL / MySQL / SQLite syntax (so a connected Postgres DB doesn't get SQLite functions). Cost
+lookup (`observability/cost.py`) prices Anthropic + OpenAI models and treats local families as free.
 
 ## Hosted topology
 
 ```
-Browser ──HTTPS──> Vercel (Next.js UI) ──fetch/SSE──> Render (FastAPI agent API) ──> Chinook (read-only)
+Browser ──HTTPS──> Vercel (Next.js UI) ──fetch──> Render (FastAPI agent API) ──> demo DB / connected DB (read-only)
 ```
 
-- **UI** (`frontend/`) is a static Next.js app. It calls the API at `NEXT_PUBLIC_API_BASE`.
-- **API** (`api/main.py`) exposes `/query`, `/query/stream` (SSE), `/schema`, `/usage`, `/health`.
-- **Demo protection** (`api/limits.py`): a per-IP free-query count and a global daily spend ceiling
-  on the server key, persisted to a JSON file on a mounted disk so counts survive restarts. A
-  multi-instance host would swap the file for a shared store.
-- Bring-your-own-key requests skip the spend cap (the visitor pays) and are bounded only by the
-  per-IP rate limit.
+- **UI** (`frontend/`) — Next.js app calling `NEXT_PUBLIC_API_BASE`; a per-browser client id (`X-Client-Id`)
+  meters the demo quota per user. Interactive schema (GSAP) and a worked example shown on arrival.
+- **API** (`api/main.py`) — `/query`, `/schema`, `/usage`, `/health`, plus `/connect` (validate + introspect
+  a user DB), `/sample` (server-side demo DB), `/models` (live model list), `/suggest` (schema-grounded
+  starter questions).
+- **Demo DB** — a real external Postgres (the FireScope wildfire project), used server-side; only an
+  allowlist of tables is exposed and credential columns (`password_hash`) are blocked at the query layer
+  (`agent/guardrails.validate_credentials` + `validate_table_access`, wired via config).
+- **Demo protection** (`api/limits.py`) — free-query count **per client id** + a global daily spend ceiling,
+  persisted to a JSON file on a mounted disk. Bring-your-own-key requests bypass the spend cap.
+- **SSRF** (`api/remote_db.py`) — user connection strings and model `base_url`s are resolved and rejected
+  if they point at private/reserved/metadata addresses; a fast TCP probe fails unreachable hosts in seconds.
+
+## Helpful failure
+
+A 0-row result is the #1 "looks broken" moment. `sql_executor` detects a filtered query that returned
+nothing and runs a quick lookup of the filtered column's real values; `answer_synthesizer` then says
+"no rows matched `category='wildfire'`; the column actually contains updates, breaking, safety, research"
+instead of vaguely reporting an empty table. On connect, `/suggest` hands the user questions grounded in
+their schema so the first question is answerable.
 
 ## Local topology (your own database)
 

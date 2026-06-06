@@ -6,7 +6,7 @@
 
 [**Live demo → promptdb-ai.vercel.app**](https://promptdb-ai.vercel.app) · [Architecture](docs/ARCHITECTURE.md) · [Use your own database](docs/CONNECTOR.md) · [Changelog](CHANGELOG.md)
 
-![accuracy](https://img.shields.io/badge/Spider_dev-69.3%25-2d6cdf) ![read-only](https://img.shields.io/badge/queries-read--only-2e8b57) ![providers](https://img.shields.io/badge/models-Anthropic_·_OpenAI_·_Ollama-555) ![license](https://img.shields.io/badge/license-MIT-555)
+![accuracy](https://img.shields.io/badge/Spider_dev-69.3%25-2d6cdf) ![read-only](https://img.shields.io/badge/queries-read--only-2e8b57) ![models](https://img.shields.io/badge/models-any_(OpenRouter_·_OpenAI_·_Anthropic_·_Ollama)-555) ![license](https://img.shields.io/badge/license-MIT-555)
 
 </div>
 
@@ -28,16 +28,24 @@ Rock dominates with 1,297 tracks, ahead of Latin (579) and Metal (374).
 · 1.98s · $0.00222 · 1 attempt
 ```
 
-## Two ways to use it
+## The live demo
 
-| | Hosted demo | Your own database |
-|---|---|---|
-| **What** | Query a bundled sample DB (Chinook) in the browser | The agent queries your live DB in place |
-| **Setup** | None — [open the live demo](https://promptdb-ai.vercel.app) | One command — [the local connector](docs/CONNECTOR.md) |
-| **Your data** | n/a (sample data) | **Never leaves your machine** — only schema + your own results reach the model |
-| **Model** | Server key, 5 free queries, then bring your own | Any: Anthropic, OpenAI, or local Ollama |
+[**promptdb-ai.vercel.app**](https://promptdb-ai.vercel.app) runs against a **real project's database** — the
+[FireScope](https://firescope.netlify.app) wildfire app (14 tables: users, roles, alerts, news, risk/feature
+caches) — so you see the agent working on a genuinely complex schema, not a toy. In the browser you can:
 
-There is no "upload your database" step and no "paste your production credentials into a website" step. A public web page cannot reach into a private database, so for your own data the agent runs **where the data lives** (the [MCP](https://modelcontextprotocol.io) connector pattern). That keeps credentials and rows on your machine — see [SECURITY.md](SECURITY.md).
+- **Query the demo** instantly — a worked example loads on arrival; click a chip or type your own.
+- **Connect your own database** — paste a read-only Postgres/MySQL connection string and the hosted
+  agent queries it (SSRF-guarded), or run the local connector for a DB on your laptop / private network.
+- **Pick any model** — the demo key (5 free queries, metered per browser), or bring your own:
+  **OpenRouter** (one key → hundreds of models including every open-source one), OpenAI, Anthropic,
+  or a custom OpenAI-compatible endpoint. The model list is fetched live.
+- **Get unstuck** — connect a DB and it suggests questions grounded in *your* schema; if a question
+  returns nothing, the agent surfaces the column's real values ("did you mean…") instead of failing silently.
+
+For a private database, the agent runs **where the data lives** (the [MCP](https://modelcontextprotocol.io)
+connector pattern) — credentials and rows never leave your machine. Demo data is served read-only with
+credential columns (e.g. `password_hash`) blocked. See [SECURITY.md](SECURITY.md).
 
 ## Results
 
@@ -77,9 +85,12 @@ flowchart LR
 queries carry a statement timeout and a row cap. The agent cannot modify data. Full write-up in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Hosted topology.** UI on Vercel (Next.js), agent API on Render (FastAPI). The demo path is
-guarded by a per-IP free-query cap and a global daily spend ceiling; bring-your-own-key requests
-bypass the cap and never enter graph state or traces.
+**Hosted topology.** UI on Vercel (Next.js), agent API on Render (FastAPI). The model is resolved
+per request — the demo runs on the server key (free queries metered **per browser** via a client id,
+plus a global daily spend ceiling), while bring-your-own-key requests bypass the cap and never enter
+graph state or traces. New endpoints: `/connect` and `/sample` (schema + queries on a connected/sample
+DB), `/models` (live model list), `/suggest` (schema-grounded starter questions). User connection
+strings and model `base_url`s are SSRF-guarded; demo credential columns are blocked at the query layer.
 
 ## Quickstart
 
@@ -107,11 +118,15 @@ PROMPTDB_DATABASE_URL="sqlite:///./mystore.db" promptdb ask "top 5 products by r
 # or plug `promptdb-mcp` into Claude Desktop / Cursor — see docs/CONNECTOR.md
 ```
 
-**Bring your own model** — Anthropic, OpenAI, or a local Ollama model (`gemma2`, `llama3`, …):
+**Bring your own model** — any OpenAI-compatible endpoint, so effectively any model:
 ```bash
-PROMPTDB_PROVIDER=openai PROMPTDB_MODEL=gpt-4o-mini  promptdb ask "..."
-PROMPTDB_PROVIDER=ollama PROMPTDB_MODEL=gemma2       promptdb ask "..."   # fully local, $0
+# OpenRouter — one key, hundreds of models including every open-source one
+PROMPTDB_PROVIDER=openrouter PROMPTDB_MODEL=meta-llama/llama-3.3-70b-instruct  promptdb ask "..."
+PROMPTDB_PROVIDER=openai     PROMPTDB_MODEL=gpt-4o-mini                        promptdb ask "..."
+PROMPTDB_PROVIDER=ollama     PROMPTDB_MODEL=gemma2                             promptdb ask "..."  # local, $0
 ```
+In the hosted UI the same choice is a picker (Demo key / OpenRouter / OpenAI / Anthropic / Custom) with a
+live model dropdown. Local models (Ollama, vLLM) run through the connector, not the hosted server.
 
 **Web / API**
 ```bash
